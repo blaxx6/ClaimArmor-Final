@@ -13,16 +13,28 @@ from app.services.pipeline import investigate
 
 class PipelineTests(unittest.TestCase):
     def setUp(self):
-        self.env_patcher = patch.dict("os.environ", {"CLAIMARMOR_LLM_MODE": "offline"})
-        self.env_patcher.start()
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.original_db_path = db.DB_PATH
-        db.DB_PATH = Path(self.temp_dir.name) / "test.db"
+        self.db_path = Path(self.temp_dir.name) / "test.db"
+        self.env_patcher = patch.dict(
+            "os.environ",
+            {
+                "CLAIMARMOR_LLM_MODE": "offline",
+                "CLAIMARMOR_DATABASE_URL": f"sqlite:///{self.db_path}",
+            },
+        )
+        self.env_patcher.start()
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+        db.dispose_engine()
         db.init_db()
 
     def tearDown(self):
         self.env_patcher.stop()
-        db.DB_PATH = self.original_db_path
+        db.dispose_engine()
+        from app.config import get_settings
+
+        get_settings.cache_clear()
         self.temp_dir.cleanup()
 
     def run_claim(self, index: int):

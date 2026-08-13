@@ -14,18 +14,31 @@ from app.main import app
 
 class AuthenticatedApiTests(unittest.TestCase):
     def setUp(self):
-        self.env_patcher = patch.dict("os.environ", {"CLAIMARMOR_LLM_MODE": "offline"})
-        self.env_patcher.start()
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.original_db_path = db.DB_PATH
-        db.DB_PATH = Path(self.temp_dir.name) / "api.db"
+        self.db_path = Path(self.temp_dir.name) / "api.db"
+        self.env_patcher = patch.dict(
+            "os.environ",
+            {
+                "CLAIMARMOR_LLM_MODE": "offline",
+                "CLAIMARMOR_DATABASE_URL": f"sqlite:///{self.db_path}",
+            },
+        )
+        self.env_patcher.start()
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+        db.dispose_engine()
+        db.init_db()
         self.client_context = TestClient(app)
         self.client = self.client_context.__enter__()
 
     def tearDown(self):
-        self.env_patcher.stop()
         self.client_context.__exit__(None, None, None)
-        db.DB_PATH = self.original_db_path
+        self.env_patcher.stop()
+        db.dispose_engine()
+        from app.config import get_settings
+
+        get_settings.cache_clear()
         self.temp_dir.cleanup()
 
     def login(self, username: str, password: str) -> dict:

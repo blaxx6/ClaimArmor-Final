@@ -58,7 +58,7 @@ class PolicyAndAgentTests(unittest.TestCase):
         risk = score_risk(claim, timeline, match["confidence"])
         rules = evaluate_rules(claim, timeline)
 
-        def structured(role, _instructions, _context, fallback):
+        def structured(role, _instructions, _context, fallback, **kwargs):
             return fallback, {
                 "mode": "gemini",
                 "used": True,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app import db
 from app.evaluation import evaluate
@@ -40,27 +41,34 @@ class EvaluationAndHardeningTests(unittest.TestCase):
 
     def test_audit_chain_detects_tampering(self):
         with tempfile.TemporaryDirectory() as directory:
-            original = db.DB_PATH
-            db.DB_PATH = Path(directory) / "audit.db"
-            try:
-                db.init_db()
-                db.put_claim({"claim_id": "CLM-AUDIT"})
-                db.append_audit("CLM-AUDIT", "ONE", {"value": 1})
-                db.append_audit("CLM-AUDIT", "TWO", {"value": 2})
-                self.assertTrue(db.verify_audit_chain("CLM-AUDIT")["valid"])
-                engine = db._engine()
+            db_path = Path(directory) / "audit.db"
+            with patch.dict(
+                "os.environ", {"CLAIMARMOR_DATABASE_URL": f"sqlite:///{db_path}"}
+            ):
+                from app.config import get_settings
+
+                get_settings.cache_clear()
+                db.dispose_engine()
                 try:
-                    with engine.begin() as connection:
-                        connection.execute(
-                            db.audit_table.update()
-                            .where(db.audit_table.c.claim_id == "CLM-AUDIT")
-                            .values(payload='{"value": 999}')
-                        )
+                    db.init_db()
+                    db.put_claim({"claim_id": "CLM-AUDIT"})
+                    db.append_audit("CLM-AUDIT", "ONE", {"value": 1})
+                    db.append_audit("CLM-AUDIT", "TWO", {"value": 2})
+                    self.assertTrue(db.verify_audit_chain("CLM-AUDIT")["valid"])
+                    engine = db._engine()
+                    try:
+                        with engine.begin() as connection:
+                            connection.execute(
+                                db.audit_table.update()
+                                .where(db.audit_table.c.claim_id == "CLM-AUDIT")
+                                .values(payload='{"value": 999}')
+                            )
+                    finally:
+                        engine.dispose()
+                    self.assertFalse(db.verify_audit_chain("CLM-AUDIT")["valid"])
                 finally:
-                    engine.dispose()
-                self.assertFalse(db.verify_audit_chain("CLM-AUDIT")["valid"])
-            finally:
-                db.DB_PATH = original
+                    db.dispose_engine()
+                    get_settings.cache_clear()
 
 
 if __name__ == "__main__":
