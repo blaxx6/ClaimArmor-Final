@@ -69,7 +69,9 @@ jobs:
           version: "v1.29.0"
 
       - name: Configure kubeconfig
-        run: echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
 
       - name: Deploy to staging
         run: |

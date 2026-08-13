@@ -11,4 +11,6 @@ ignore = [
     "BLE001", # Blind except
     "S110",   # Try-except-pass
     "F841",   # Unused local variables
+    "DTZ011", # datetime.date.today()
+
 ]

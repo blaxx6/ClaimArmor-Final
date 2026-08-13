@@ -31,7 +31,9 @@ jobs:
           version: "v1.29.0"
 
       - name: Configure kubeconfig
-        run: echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
 
       - name: Deploy canary ({{ inputs.canary_weight }}% traffic)
         run: |
@@ -82,7 +84,9 @@ jobs:
           version: "v1.29.0"
 
       - name: Configure kubeconfig
-        run: echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
 
       - name: Promote to production
         run: |
