@@ -18,10 +18,13 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 
 from app.ml.features import FEATURE_NAMES
+from app.ml.generate import write_dataset
+from app.ml.train import train
 from app.services.policy import evaluate_retrieval
 
 DEFAULT_DATASET = Path("artifacts/synthetic_claims.csv")
 DEFAULT_MODEL = Path("artifacts/risk_model.joblib")
+DEFAULT_METRICS = Path("artifacts/model_metrics.json")
 DEFAULT_OUTPUT = Path("artifacts/system_evaluation.json")
 
 
@@ -52,6 +55,11 @@ def _score(name: str, labels, predictions, probabilities, amounts) -> dict:
 
 
 def evaluate(dataset_path: Path = DEFAULT_DATASET, model_path: Path = DEFAULT_MODEL, output_path: Path | None = DEFAULT_OUTPUT) -> dict:
+    if not dataset_path.exists():
+        write_dataset(dataset_path, rows=3000, seed=42)
+    if not model_path.exists():
+        train(dataset_path, model_path, DEFAULT_METRICS, seed=42)
+
     complete_frame = pd.read_csv(dataset_path)
     _, frame = train_test_split(
         complete_frame,
