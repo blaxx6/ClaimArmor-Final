@@ -84,7 +84,7 @@ def investigate_claim_async(
             pass
         raise self.retry(
             exc=exc,
-            countdown=30 * (2 ** self.request.retries),  # Exponential backoff
+            countdown=30 * (2**self.request.retries),  # Exponential backoff
         )
 
 
@@ -112,11 +112,13 @@ def batch_investigate(
             results["processed"] += 1
         except Exception as exc:
             logger.warning("Batch item failed claim_id=%s: %s", claim_id, exc)
-            results["claim_results"].append({
-                "status": "FAILED",
-                "claim_id": claim_id,
-                "error": str(exc)[:200],
-            })
+            results["claim_results"].append(
+                {
+                    "status": "FAILED",
+                    "claim_id": claim_id,
+                    "error": str(exc)[:200],
+                }
+            )
             results["failed"] += 1
 
     return results
@@ -146,6 +148,7 @@ def retrain_model(
     # Try MLflow registration
     try:
         from app.ml.registry import register_model
+
         register_model(model_path, metrics)
         metrics["mlflow_registered"] = True
     except Exception as exc:
@@ -163,10 +166,12 @@ def check_model_drift() -> dict[str, Any]:
     """Check for feature distribution drift using PSI."""
     try:
         from app.ml.drift import compute_drift_report
+
         report = compute_drift_report()
         if report.get("drift_detected"):
             logger.warning("Model drift detected: %s", report)
             from app.services.notifications import alert_model_drift
+
             alert_model_drift(report)
         return report
     except Exception as exc:

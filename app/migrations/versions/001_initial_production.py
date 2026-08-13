@@ -4,6 +4,7 @@ Revision ID: 001_initial_production
 Revises: None
 Create Date: 2026-08-13
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -17,9 +18,22 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     # ── Add tenant_id to existing tables ──────────────────────────────
-    for table_name in ["claims", "investigations", "reviews", "writebacks", "audit_events", "users", "policies"]:
+    for table_name in [
+        "claims",
+        "investigations",
+        "reviews",
+        "writebacks",
+        "audit_events",
+        "users",
+        "policies",
+    ]:
         try:
-            op.add_column(table_name, sa.Column("tenant_id", sa.String(80), nullable=True, server_default="default"))
+            op.add_column(
+                table_name,
+                sa.Column(
+                    "tenant_id", sa.String(80), nullable=True, server_default="default"
+                ),
+            )
             op.create_index(f"ix_{table_name}_tenant_id", table_name, ["tenant_id"])
         except Exception:
             pass  # Column may already exist
@@ -58,7 +72,15 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("llm_usage")
     op.drop_table("task_status")
-    for table_name in ["claims", "investigations", "reviews", "writebacks", "audit_events", "users", "policies"]:
+    for table_name in [
+        "claims",
+        "investigations",
+        "reviews",
+        "writebacks",
+        "audit_events",
+        "users",
+        "policies",
+    ]:
         try:
             op.drop_index(f"ix_{table_name}_tenant_id", table_name)
             op.drop_column(table_name, "tenant_id")

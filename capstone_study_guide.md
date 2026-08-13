@@ -154,18 +154,18 @@ A TypedDict that flows through all nodes containing: `claim`, `match`, `timeline
 ```python
 class InvestigationResult(BaseModel):
     claim_id: str
-    member_match: dict           # Identity resolution result
-    coverage_timeline: list      # All coverages (active + inactive)
-    risk: dict                   # ML probability + band + factors
-    rules: list                  # Triggered COB rules
-    evidence: list               # Retrieved policy documents
-    agent_trace: list            # Full 7-stage trace
+    member_match: dict  # Identity resolution result
+    coverage_timeline: list  # All coverages (active + inactive)
+    risk: dict  # ML probability + band + factors
+    rules: list  # Triggered COB rules
+    evidence: list  # Retrieved policy documents
+    agent_trace: list  # Full 7-stage trace
     recommended_primary_payer: str | None
-    route: DecisionRoute         # CLEAR / HOLD / HUMAN_REVIEW / UNDETERMINED
-    confidence: float            # 0 to 1
-    financial_impact: dict       # Amount at risk + review cost
-    explanation: str             # Human-readable summary
-    limitations: list[str]       # Transparency disclosures
+    route: DecisionRoute  # CLEAR / HOLD / HUMAN_REVIEW / UNDETERMINED
+    confidence: float  # 0 to 1
+    financial_impact: dict  # Amount at risk + review cost
+    explanation: str  # Human-readable summary
+    limitations: list[str]  # Transparency disclosures
 ```
 
 ---

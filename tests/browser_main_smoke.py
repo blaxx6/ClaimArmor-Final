@@ -8,7 +8,11 @@ with sync_playwright() as playwright:
     page.get_by_text("CLM-HOLD-001", exact=True).click()
     page.get_by_role("button", name="Run investigation").click()
     page.get_by_text("Decision comparison", exact=True).wait_for(timeout=20_000)
-    comparison = page.get_by_text("Decision comparison", exact=True).locator("xpath=ancestor::div[contains(@class,'card')]").inner_text()
+    comparison = (
+        page.get_by_text("Decision comparison", exact=True)
+        .locator("xpath=ancestor::div[contains(@class,'card')]")
+        .inner_text()
+    )
     assert "Deterministic rules" in comparison
     assert "HOLD" in comparison
     assert "Proposed primary payer" in comparison

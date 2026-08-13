@@ -16,14 +16,24 @@ class EvaluationAndHardeningTests(unittest.TestCase):
         self.assertEqual(result["evaluation_rows"], 660)
         self.assertEqual(len(result["approaches"]), 3)
         self.assertGreaterEqual(result["retrieval"]["hit_at_4"], 0.8)
-        self.assertTrue(all(0 <= item["precision"] <= 1 for item in result["approaches"]))
+        self.assertTrue(
+            all(0 <= item["precision"] <= 1 for item in result["approaches"])
+        )
 
     def test_roi_is_derived_from_visible_assumptions(self):
-        result = simulate_roi({
-            "annual_claims": 1000, "average_claim_amount": 1000, "leakage_rate": 0.10,
-            "value_detection_rate": 0.80, "review_rate": 0.20, "review_cost": 10,
-            "false_positive_rate": 0.05, "false_positive_cost": 20, "annual_platform_cost": 5000,
-        })
+        result = simulate_roi(
+            {
+                "annual_claims": 1000,
+                "average_claim_amount": 1000,
+                "leakage_rate": 0.10,
+                "value_detection_rate": 0.80,
+                "review_rate": 0.20,
+                "review_cost": 10,
+                "false_positive_rate": 0.05,
+                "false_positive_cost": 20,
+                "annual_platform_cost": 5000,
+            }
+        )
         self.assertEqual(result["estimated_gross_leakage"], 100000)
         self.assertEqual(result["estimated_prevented_leakage"], 80000)
         self.assertEqual(result["estimated_net_benefit"], 72000)
@@ -41,7 +51,11 @@ class EvaluationAndHardeningTests(unittest.TestCase):
                 engine = db._engine()
                 try:
                     with engine.begin() as connection:
-                        connection.execute(db.audit_table.update().where(db.audit_table.c.claim_id == "CLM-AUDIT").values(payload='{"value": 999}'))
+                        connection.execute(
+                            db.audit_table.update()
+                            .where(db.audit_table.c.claim_id == "CLM-AUDIT")
+                            .values(payload='{"value": 999}')
+                        )
                 finally:
                     engine.dispose()
                 self.assertFalse(db.verify_audit_chain("CLM-AUDIT")["valid"])

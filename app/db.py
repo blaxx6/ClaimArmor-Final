@@ -120,7 +120,9 @@ tasks_table = Table(
     Column("task_id", String(80), primary_key=True),
     Column("claim_id", String(80), nullable=False, index=True),
     Column("tenant_id", String(80), nullable=False, default="default", index=True),
-    Column("status", String(40), nullable=False),  # QUEUED, IN_PROGRESS, COMPLETE, FAILED
+    Column(
+        "status", String(40), nullable=False
+    ),  # QUEUED, IN_PROGRESS, COMPLETE, FAILED
     Column("result", Text, nullable=True),
     Column("error", Text, nullable=True),
     Column("created_at", String(40), nullable=False),
@@ -215,6 +217,7 @@ def storage_info() -> dict:
 
 # ── Generic helpers ───────────────────────────────────────────────────
 
+
 def _put_unique(table: Table, key_column, key: str, values: dict) -> None:
     engine = _engine()
     with engine.begin() as conn:
@@ -223,6 +226,7 @@ def _put_unique(table: Table, key_column, key: str, values: dict) -> None:
 
 
 # ── Claims CRUD ───────────────────────────────────────────────────────
+
 
 def put_claim(claim: dict[str, Any]) -> None:
     _put_unique(
@@ -258,6 +262,7 @@ def get_claim(claim_id: str) -> dict[str, Any] | None:
 
 
 # ── Investigations CRUD ───────────────────────────────────────────────
+
 
 def put_investigation(claim_id: str, result: dict[str, Any]) -> None:
     _put_unique(
@@ -298,6 +303,7 @@ def list_investigations(tenant_id: str | None = None) -> list[dict[str, Any]]:
 
 # ── Reviews CRUD ──────────────────────────────────────────────────────
 
+
 def put_review(claim_id: str, payload: dict[str, Any]) -> None:
     engine = _engine()
     with engine.begin() as conn:
@@ -322,6 +328,7 @@ def reviewed_claim_ids(tenant_id: str | None = None) -> set[str]:
 
 # ── Writebacks CRUD ──────────────────────────────────────────────────
 
+
 def put_writeback(claim_id: str, payload: dict[str, Any]) -> None:
     _put_unique(
         writebacks_table,
@@ -337,6 +344,7 @@ def put_writeback(claim_id: str, payload: dict[str, Any]) -> None:
 
 
 # ── Audit chain (SHA-256 hash-linked) ────────────────────────────────
+
 
 def append_audit(
     claim_id: str,
@@ -405,7 +413,9 @@ def verify_audit_chain(claim_id: str) -> dict:
             f"{claim_id}|{event['event_type']}|{encoded}|{expected_previous}|{event['created_at']}".encode()
         ).hexdigest()
         if event["previous_hash"] != expected_previous:
-            failures.append({"event_id": event["id"], "reason": "previous_hash_mismatch"})
+            failures.append(
+                {"event_id": event["id"], "reason": "previous_hash_mismatch"}
+            )
         if event["event_hash"] != expected_hash:
             failures.append({"event_id": event["id"], "reason": "event_hash_mismatch"})
         expected_previous = event["event_hash"]
@@ -419,6 +429,7 @@ def verify_audit_chain(claim_id: str) -> dict:
 
 
 # ── User management ──────────────────────────────────────────────────
+
 
 def put_user(
     username: str,
@@ -448,9 +459,7 @@ def get_user(username: str) -> dict | None:
     engine = _engine()
     with engine.connect() as conn:
         row = (
-            conn.execute(
-                select(users_table).where(users_table.c.username == username)
-            )
+            conn.execute(select(users_table).where(users_table.c.username == username))
             .mappings()
             .first()
         )
@@ -486,6 +495,7 @@ def deactivate_user(username: str) -> bool:
 
 # ── Policy management ────────────────────────────────────────────────
 
+
 def put_policy_record(record: dict[str, Any]) -> None:
     key = f"{record['policy_id']}:{record['version']}"
     _put_unique(
@@ -510,7 +520,9 @@ def list_policy_records(active_only: bool = False) -> list[dict[str, Any]]:
         query = select(policies_table)
         if active_only:
             query = query.where(policies_table.c.status == "ACTIVE")
-        rows = conn.execute(query.order_by(policies_table.c.created_at)).mappings().all()
+        rows = (
+            conn.execute(query.order_by(policies_table.c.created_at)).mappings().all()
+        )
     return [{**json.loads(row["payload"]), "status": row["status"]} for row in rows]
 
 
@@ -543,6 +555,7 @@ def set_policy_status(policy_id: str, version: str, status: str) -> bool:
 
 
 # ── Task status (Celery async tracking) ──────────────────────────────
+
 
 def create_task(
     task_id: str,
@@ -590,9 +603,7 @@ def get_task(task_id: str) -> dict | None:
     engine = _engine()
     with engine.connect() as conn:
         row = (
-            conn.execute(
-                select(tasks_table).where(tasks_table.c.task_id == task_id)
-            )
+            conn.execute(select(tasks_table).where(tasks_table.c.task_id == task_id))
             .mappings()
             .first()
         )
@@ -605,6 +616,7 @@ def get_task(task_id: str) -> dict | None:
 
 
 # ── LLM Usage tracking ───────────────────────────────────────────────
+
 
 def log_llm_usage(
     tenant_id: str,

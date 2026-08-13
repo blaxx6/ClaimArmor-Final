@@ -9,7 +9,14 @@ from app.services.risk import score_risk
 from app.services.rules import evaluate_rules
 
 
-def _finalize(claim: dict, match: dict, timeline: list[dict], risk: dict, rules: list[dict], agent_result: dict) -> InvestigationResult:
+def _finalize(
+    claim: dict,
+    match: dict,
+    timeline: list[dict],
+    risk: dict,
+    rules: list[dict],
+    agent_result: dict,
+) -> InvestigationResult:
     limitations = [
         "All claim and member data are synthetic.",
         "The calibrated XGBoost model was trained and evaluated only on synthetic scenarios; real-payer calibration is still required.",
@@ -32,7 +39,15 @@ def _finalize(claim: dict, match: dict, timeline: list[dict], risk: dict, rules:
     )
     payload = result.model_dump(mode="json")
     db.put_investigation(claim["claim_id"], payload)
-    db.append_audit(claim["claim_id"], "INVESTIGATION_COMPLETED", {"route": result.route.value, "confidence": result.confidence, "risk": result.risk["probability"]})
+    db.append_audit(
+        claim["claim_id"],
+        "INVESTIGATION_COMPLETED",
+        {
+            "route": result.route.value,
+            "confidence": result.confidence,
+            "risk": result.risk["probability"],
+        },
+    )
     return result
 
 
@@ -41,7 +56,14 @@ def investigate(claim: dict) -> InvestigationResult:
     timeline = active_coverages(match["member_id"], claim["service_date"], COVERAGES)
     risk = score_risk(claim, timeline, match["confidence"])
     rules = evaluate_rules(claim, timeline)
-    return _finalize(claim, match, timeline, risk, rules, run_agents(claim, match, timeline, risk, rules))
+    return _finalize(
+        claim,
+        match,
+        timeline,
+        risk,
+        rules,
+        run_agents(claim, match, timeline, risk, rules),
+    )
 
 
 def investigate_events(claim: dict):

@@ -41,6 +41,7 @@ _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
 # ── Password hashing ─────────────────────────────────────────────────
 
+
 def _password_hash(password: str, salt: str) -> str:
     """PBKDF2-HMAC-SHA256 with 260k iterations (OWASP 2024 recommendation)."""
     return hashlib.pbkdf2_hmac(
@@ -54,6 +55,7 @@ def _generate_salt() -> str:
 
 
 # ── User management ──────────────────────────────────────────────────
+
 
 def seed_users() -> None:
     """Seed demo users in development environments only."""
@@ -107,6 +109,7 @@ def create_user(
 
 # ── Authentication ───────────────────────────────────────────────────
 
+
 def authenticate(username: str, password: str) -> dict | None:
     """Authenticate a user and return their profile dict, or None."""
     user = db.get_user(username)
@@ -127,6 +130,7 @@ def authenticate(username: str, password: str) -> dict | None:
 
 # ── Rate limiting ────────────────────────────────────────────────────
 
+
 def _check_rate_limit(client_ip: str) -> None:
     """Sliding-window rate limiter. Uses in-memory deque."""
     settings = get_settings()
@@ -136,13 +140,12 @@ def _check_rate_limit(client_ip: str) -> None:
     while attempts and attempts[0] < now - 60:
         attempts.popleft()
     if len(attempts) >= max_attempts:
-        raise HTTPException(
-            429, "Too many login attempts; retry after one minute"
-        )
+        raise HTTPException(429, "Too many login attempts; retry after one minute")
     attempts.append(now)
 
 
 # ── JWT Token management ─────────────────────────────────────────────
+
 
 def _secret() -> bytes:
     return get_settings().auth_secret.get_secret_value().encode()
@@ -169,9 +172,7 @@ def issue_token(
         "exp": int(time.time()) + lifetime_seconds,
     }
     body = (
-        base64.urlsafe_b64encode(
-            json.dumps(payload, separators=(",", ":")).encode()
-        )
+        base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
         .decode()
         .rstrip("=")
     )
@@ -194,9 +195,7 @@ def decode_token(token: str, expected_type: str = "access") -> dict:
     """Decode and verify a token. Raises HTTPException on failure."""
     try:
         body, signature = token.split(".", 1)
-        expected = hmac.new(
-            _secret(), body.encode(), hashlib.sha256
-        ).hexdigest()
+        expected = hmac.new(_secret(), body.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(signature, expected):
             raise ValueError("signature")
         padded = body + "=" * (-len(body) % 4)
@@ -207,9 +206,7 @@ def decode_token(token: str, expected_type: str = "access") -> dict:
             raise ValueError("wrong_token_type")
         return payload
     except Exception as exc:
-        raise HTTPException(
-            401, "Invalid or expired access token"
-        ) from exc
+        raise HTTPException(401, "Invalid or expired access token") from exc
 
 
 def refresh_access_token(refresh_token_str: str) -> dict:
@@ -225,6 +222,7 @@ def refresh_access_token(refresh_token_str: str) -> dict:
 
 
 # ── FastAPI dependencies ─────────────────────────────────────────────
+
 
 def current_user(authorization: str | None = Header(default=None)) -> dict:
     """Extract the authenticated user from the Authorization header."""

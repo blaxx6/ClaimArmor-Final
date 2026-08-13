@@ -39,23 +39,33 @@ def register_model(
     """Register a trained model artifact in MLflow with metrics and tags."""
     mlflow = _get_client()
 
-    with mlflow.start_run(run_name=f"train-{metrics.get('model_version', 'unknown')}") as run:
+    with mlflow.start_run(
+        run_name=f"train-{metrics.get('model_version', 'unknown')}"
+    ) as run:
         # Log parameters
-        mlflow.log_params({
-            "model_type": metrics.get("model_type", "unknown"),
-            "model_version": metrics.get("model_version", "unknown"),
-            "dataset_rows": metrics.get("dataset_rows", 0),
-            "training_rows": metrics.get("training_rows", 0),
-            "test_rows": metrics.get("test_rows", 0),
-            "threshold": metrics.get("threshold", 0.5),
-            "calibration": metrics.get("calibration", "none"),
-        })
+        mlflow.log_params(
+            {
+                "model_type": metrics.get("model_type", "unknown"),
+                "model_version": metrics.get("model_version", "unknown"),
+                "dataset_rows": metrics.get("dataset_rows", 0),
+                "training_rows": metrics.get("training_rows", 0),
+                "test_rows": metrics.get("test_rows", 0),
+                "threshold": metrics.get("threshold", 0.5),
+                "calibration": metrics.get("calibration", "none"),
+            }
+        )
 
         # Log metrics
         for key in [
-            "accuracy", "precision", "recall", "f1",
-            "roc_auc", "pr_auc", "brier_score",
-            "value_weighted_recall", "positive_rate",
+            "accuracy",
+            "precision",
+            "recall",
+            "f1",
+            "roc_auc",
+            "pr_auc",
+            "brier_score",
+            "value_weighted_recall",
+            "positive_rate",
         ]:
             if key in metrics:
                 mlflow.log_metric(key, metrics[key])
@@ -114,6 +124,7 @@ def load_production_model(
         )
 
         import joblib
+
         artifacts = mlflow.artifacts.download_artifacts(
             run_id=version.run_id,
             artifact_path="risk_model.joblib",

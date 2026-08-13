@@ -59,7 +59,6 @@ def compute_drift_report(
     """
     import pandas as pd
 
-
     settings = get_settings()
 
     # Load training distribution
@@ -76,6 +75,7 @@ def compute_drift_report(
     # Get recent claims from DB
     if recent_claims is None:
         from app import db
+
         investigations = db.list_investigations()
         if len(investigations) < 10:
             return {
@@ -121,9 +121,12 @@ def compute_drift_report(
         feature_drift[feature] = {
             "psi": round(psi, 6),
             "status": (
-                "SIGNIFICANT_SHIFT" if psi > PSI_SIGNIFICANT_SHIFT
-                else "MODERATE_SHIFT" if psi > PSI_MODERATE_SHIFT
-                else "MINOR_SHIFT" if psi > PSI_NO_SHIFT
+                "SIGNIFICANT_SHIFT"
+                if psi > PSI_SIGNIFICANT_SHIFT
+                else "MODERATE_SHIFT"
+                if psi > PSI_MODERATE_SHIFT
+                else "MINOR_SHIFT"
+                if psi > PSI_NO_SHIFT
                 else "STABLE"
             ),
         }
@@ -143,10 +146,7 @@ def compute_drift_report(
         "features_checked": len(feature_drift),
         "drifted_features": drift_features,
         "feature_detail": feature_drift,
-        "recommendation": (
-            "RETRAIN_RECOMMENDED" if drift_detected
-            else "MODEL_STABLE"
-        ),
+        "recommendation": ("RETRAIN_RECOMMENDED" if drift_detected else "MODEL_STABLE"),
     }
 
     if drift_detected:

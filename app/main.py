@@ -115,6 +115,7 @@ logger = logging.getLogger("claimarmor")
 
 # ── App lifecycle ─────────────────────────────────────────────────────
 
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.init_db()
@@ -151,7 +152,9 @@ app.add_middleware(
 # ── Static files ──────────────────────────────────────────────────────
 react_dist = Path(__file__).parent / "static" / "react"
 if react_dist.exists():
-    app.mount("/react", StaticFiles(directory=react_dist, html=True), name="react-dashboard")
+    app.mount(
+        "/react", StaticFiles(directory=react_dist, html=True), name="react-dashboard"
+    )
 
 # ── OpenTelemetry (optional) ──────────────────────────────────────────
 try:
@@ -177,6 +180,7 @@ INVESTIGATIONS = Counter(
 
 # ── Middleware ────────────────────────────────────────────────────────
 
+
 @app.middleware("http")
 async def operational_middleware(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))[:80]
@@ -192,7 +196,9 @@ async def operational_middleware(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Strict-Transport-Security"] = (
+        "max-age=31536000; includeSubDomains"
+    )
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
 
     if request.url.path.startswith("/docs"):
@@ -224,6 +230,7 @@ async def operational_middleware(request: Request, call_next):
 # HEALTH & METRICS
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.get("/metrics", include_in_schema=False)
 def prometheus_metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
@@ -249,6 +256,7 @@ def health() -> dict:
 # ═══════════════════════════════════════════════════════════════════════
 # AUTHENTICATION
 # ═══════════════════════════════════════════════════════════════════════
+
 
 @app.post("/api/auth/login")
 @app.post("/api/v1/auth/login")
@@ -281,61 +289,101 @@ def me(user: dict = Depends(current_user)) -> dict:
 # CLAIMS
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.get("/api/claims")
 @app.get("/api/v1/claims")
-def claims(_: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> list[dict]:
+def claims(
+    _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR")),
+) -> list[dict]:
     return db.list_claims()
 
 
 @app.post("/api/claims", status_code=201)
 @app.post("/api/v1/claims", status_code=201)
-def create_claim(claim: ClaimInput, user: dict = Depends(require_roles("ANALYST"))) -> dict:
+def create_claim(
+    claim: ClaimInput, user: dict = Depends(require_roles("ANALYST"))
+) -> dict:
     if db.get_claim(claim.claim_id):
         raise HTTPException(409, "A claim with this ID already exists")
     payload = claim.model_dump(mode="json")
     db.put_claim(payload)
-    db.append_audit(claim.claim_id, "CLAIM_INGESTED", {"source": "api", "actor": user["username"]})
+    db.append_audit(
+        claim.claim_id, "CLAIM_INGESTED", {"source": "api", "actor": user["username"]}
+    )
     return payload
 
 
 @app.post("/api/claims/upload-csv")
 @app.post("/api/v1/claims/upload-csv")
-def upload_claim_csv(request: CsvUploadRequest, user: dict = Depends(require_roles("ANALYST"))) -> dict:
+def upload_claim_csv(
+    request: CsvUploadRequest, user: dict = Depends(require_roles("ANALYST"))
+) -> dict:
     reader = csv.DictReader(io.StringIO(request.csv_text))
-    required = {"claim_id", "member_name", "member_dob", "service_date", "amount", "submitted_payer"}
+    required = {
+        "claim_id",
+        "member_name",
+        "member_dob",
+        "service_date",
+        "amount",
+        "submitted_payer",
+    }
     if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
         raise HTTPException(422, f"CSV requires columns: {', '.join(sorted(required))}")
     created, duplicates, errors = [], [], []
     max_rows = settings.max_csv_upload_rows
     for row_number, row in enumerate(reader, start=2):
         if row_number > max_rows + 1:
-            errors.append({"row": row_number, "error": f"Maximum batch size is {max_rows} claims"})
+            errors.append(
+                {"row": row_number, "error": f"Maximum batch size is {max_rows} claims"}
+            )
             break
         try:
             row["amount"] = float(row["amount"])
-            row["accident_related"] = str(row.get("accident_related", "false")).casefold() in {"true", "1", "yes"}
-            for optional, default in {"member_id": None, "claim_type": "MEDICAL", "diagnosis_group": "GENERAL"}.items():
+            row["accident_related"] = str(
+                row.get("accident_related", "false")
+            ).casefold() in {"true", "1", "yes"}
+            for optional, default in {
+                "member_id": None,
+                "claim_type": "MEDICAL",
+                "diagnosis_group": "GENERAL",
+            }.items():
                 row[optional] = row.get(optional) or default
             claim = ClaimInput.model_validate(row).model_dump(mode="json")
             if db.get_claim(claim["claim_id"]):
                 duplicates.append(claim["claim_id"])
                 continue
             db.put_claim(claim)
-            db.append_audit(claim["claim_id"], "CLAIM_INGESTED", {"source": "csv", "actor": user["username"], "row": row_number})
+            db.append_audit(
+                claim["claim_id"],
+                "CLAIM_INGESTED",
+                {"source": "csv", "actor": user["username"], "row": row_number},
+            )
             created.append(claim["claim_id"])
         except Exception as exc:
-            errors.append({"row": row_number, "claim_id": row.get("claim_id"), "error": str(exc)[:300]})
+            errors.append(
+                {
+                    "row": row_number,
+                    "claim_id": row.get("claim_id"),
+                    "error": str(exc)[:300],
+                }
+            )
     return {
         "created": created,
         "duplicates": duplicates,
         "errors": errors,
-        "summary": {"created": len(created), "duplicates": len(duplicates), "errors": len(errors)},
+        "summary": {
+            "created": len(created),
+            "duplicates": len(duplicates),
+            "errors": len(errors),
+        },
     }
 
 
 @app.post("/api/claims/upload-edi")
 @app.post("/api/v1/claims/upload-edi")
-def upload_synthetic_edi(request: EdiUploadRequest, user: dict = Depends(require_roles("ANALYST"))) -> dict:
+def upload_synthetic_edi(
+    request: EdiUploadRequest, user: dict = Depends(require_roles("ANALYST"))
+) -> dict:
     try:
         parsed = parse_synthetic_837(request.edi_text)
     except ValueError as exc:
@@ -347,18 +395,30 @@ def upload_synthetic_edi(request: EdiUploadRequest, user: dict = Depends(require
             duplicates.append(claim["claim_id"])
             continue
         db.put_claim(claim)
-        db.append_audit(claim["claim_id"], "CLAIM_INGESTED", {"source": "synthetic_edi", "actor": user["username"]})
+        db.append_audit(
+            claim["claim_id"],
+            "CLAIM_INGESTED",
+            {"source": "synthetic_edi", "actor": user["username"]},
+        )
         created.append(claim["claim_id"])
-    return {"created": created, "duplicates": duplicates, "format": "CLAIMARMOR_EDI_LIKE_V1", "x12_certified": False}
+    return {
+        "created": created,
+        "duplicates": duplicates,
+        "format": "CLAIMARMOR_EDI_LIKE_V1",
+        "x12_certified": False,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # INVESTIGATIONS (sync + async)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.get("/api/claims/{claim_id}")
 @app.get("/api/v1/claims/{claim_id}")
-def claim_detail(claim_id: str, _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> dict:
+def claim_detail(
+    claim_id: str, _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))
+) -> dict:
     claim = db.get_claim(claim_id)
     if not claim:
         raise HTTPException(404, "Claim not found")
@@ -367,12 +427,16 @@ def claim_detail(claim_id: str, _: dict = Depends(require_roles("ANALYST", "REVI
 
 @app.post("/api/claims/{claim_id}/investigate")
 @app.post("/api/v1/claims/{claim_id}/investigate")
-def investigate_claim(claim_id: str, user: dict = Depends(require_roles("ANALYST", "REVIEWER"))) -> dict:
+def investigate_claim(
+    claim_id: str, user: dict = Depends(require_roles("ANALYST", "REVIEWER"))
+) -> dict:
     """Synchronous investigation (backward-compatible)."""
     claim = db.get_claim(claim_id)
     if not claim:
         raise HTTPException(404, "Claim not found")
-    db.append_audit(claim_id, "INVESTIGATION_REQUESTED", {"actor": user["username"], "mode": "sync"})
+    db.append_audit(
+        claim_id, "INVESTIGATION_REQUESTED", {"actor": user["username"], "mode": "sync"}
+    )
     result = investigate(claim).model_dump(mode="json")
     INVESTIGATIONS.labels(result.get("route", "UNKNOWN"), "sync").inc()
     return result
@@ -483,17 +547,25 @@ def simulate_claim_stream(
     for sequence, claim_id in enumerate(request.claim_ids, start=1):
         claim = db.get_claim(claim_id)
         if not claim:
-            events.append({"sequence": sequence, "claim_id": claim_id, "status": "NOT_FOUND"})
+            events.append(
+                {"sequence": sequence, "claim_id": claim_id, "status": "NOT_FOUND"}
+            )
             continue
-        db.append_audit(claim_id, "STREAM_EVENT_RECEIVED", {"sequence": sequence, "actor": user["username"]})
+        db.append_audit(
+            claim_id,
+            "STREAM_EVENT_RECEIVED",
+            {"sequence": sequence, "actor": user["username"]},
+        )
         result = investigate(claim).model_dump(mode="json")
-        events.append({
-            "sequence": sequence,
-            "claim_id": claim_id,
-            "status": "PROCESSED",
-            "route": result["route"],
-            "confidence": result["confidence"],
-        })
+        events.append(
+            {
+                "sequence": sequence,
+                "claim_id": claim_id,
+                "status": "PROCESSED",
+                "route": result["route"],
+                "confidence": result["confidence"],
+            }
+        )
     return {
         "stream_id": str(uuid.uuid4()),
         "events": events,
@@ -505,9 +577,12 @@ def simulate_claim_stream(
 # REPLAY & REVIEW
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.post("/api/claims/{claim_id}/replay")
 @app.post("/api/v1/claims/{claim_id}/replay")
-def replay_claim(claim_id: str, user: dict = Depends(require_roles("REVIEWER", "AUDITOR"))) -> dict:
+def replay_claim(
+    claim_id: str, user: dict = Depends(require_roles("REVIEWER", "AUDITOR"))
+) -> dict:
     claim = db.get_claim(claim_id)
     if not claim:
         raise HTTPException(404, "Claim not found")
@@ -515,36 +590,58 @@ def replay_claim(claim_id: str, user: dict = Depends(require_roles("REVIEWER", "
     after = investigate(claim).model_dump(mode="json")
     comparison = {
         "route_changed": bool(before and before["route"] != after["route"]),
-        "confidence_delta": round(after["confidence"] - before["confidence"], 4) if before else None,
+        "confidence_delta": round(after["confidence"] - before["confidence"], 4)
+        if before
+        else None,
         "model_before": before["risk"]["model_version"] if before else None,
         "model_after": after["risk"]["model_version"],
-        "evidence_before": [item["document_hash"] for item in before.get("evidence", [])] if before else [],
+        "evidence_before": [
+            item["document_hash"] for item in before.get("evidence", [])
+        ]
+        if before
+        else [],
         "evidence_after": [item["document_hash"] for item in after["evidence"]],
     }
-    db.append_audit(claim_id, "INVESTIGATION_REPLAYED", {"actor": user["username"], **comparison})
-    return {"claim_id": claim_id, "before": before, "after": after, "comparison": comparison}
+    db.append_audit(
+        claim_id, "INVESTIGATION_REPLAYED", {"actor": user["username"], **comparison}
+    )
+    return {
+        "claim_id": claim_id,
+        "before": before,
+        "after": after,
+        "comparison": comparison,
+    }
 
 
 @app.get("/api/investigations")
 @app.get("/api/v1/investigations")
-def investigations(_: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> list[dict]:
+def investigations(
+    _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR")),
+) -> list[dict]:
     return db.list_investigations()
 
 
 @app.get("/api/review-queue")
 @app.get("/api/v1/review-queue")
-def review_queue(_: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> list[dict]:
+def review_queue(
+    _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR")),
+) -> list[dict]:
     reviewed = db.reviewed_claim_ids()
     return [
         item
         for item in db.list_investigations()
-        if item["route"] in {"HOLD", "HUMAN_REVIEW", "UNDETERMINED"} and item["claim_id"] not in reviewed
+        if item["route"] in {"HOLD", "HUMAN_REVIEW", "UNDETERMINED"}
+        and item["claim_id"] not in reviewed
     ]
 
 
 @app.post("/api/investigations/{claim_id}/review")
 @app.post("/api/v1/investigations/{claim_id}/review")
-def review(claim_id: str, request: ReviewRequest, user: dict = Depends(require_roles("REVIEWER"))) -> dict:
+def review(
+    claim_id: str,
+    request: ReviewRequest,
+    user: dict = Depends(require_roles("REVIEWER")),
+) -> dict:
     result = db.get_investigation(claim_id)
     if not result:
         raise HTTPException(404, "Investigation not found")
@@ -584,9 +681,12 @@ def review(claim_id: str, request: ReviewRequest, user: dict = Depends(require_r
 # AUDIT
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.get("/api/audit/{claim_id}")
 @app.get("/api/v1/audit/{claim_id}")
-def audit(claim_id: str, _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> list[dict]:
+def audit(
+    claim_id: str, _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))
+) -> list[dict]:
     if not db.get_claim(claim_id):
         raise HTTPException(404, "Claim not found")
     return db.get_audit(claim_id)
@@ -594,7 +694,9 @@ def audit(claim_id: str, _: dict = Depends(require_roles("ANALYST", "REVIEWER", 
 
 @app.get("/api/audit/{claim_id}/verify")
 @app.get("/api/v1/audit/{claim_id}/verify")
-def verify_audit(claim_id: str, _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> dict:
+def verify_audit(
+    claim_id: str, _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))
+) -> dict:
     if not db.get_claim(claim_id):
         raise HTTPException(404, "Claim not found")
     return db.verify_audit_chain(claim_id)
@@ -604,17 +706,24 @@ def verify_audit(claim_id: str, _: dict = Depends(require_roles("ANALYST", "REVI
 # METRICS & EVALUATION
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.get("/api/metrics")
 @app.get("/api/v1/metrics")
-def metrics_endpoint(_: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> dict:
+def metrics_endpoint(
+    _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR")),
+) -> dict:
     results = db.list_investigations()
     total = len(results)
     amount_at_risk = sum(item["financial_impact"]["amount_at_risk"] for item in results)
-    by_route = {route: sum(1 for item in results if item["route"] == route) for route in ["CLEAR", "HOLD", "HUMAN_REVIEW", "UNDETERMINED"]}
+    by_route = {
+        route: sum(1 for item in results if item["route"] == route)
+        for route in ["CLEAR", "HOLD", "HUMAN_REVIEW", "UNDETERMINED"]
+    }
     pending = [
         item
         for item in results
-        if item["route"] in {"HOLD", "HUMAN_REVIEW", "UNDETERMINED"} and item["claim_id"] not in db.reviewed_claim_ids()
+        if item["route"] in {"HOLD", "HUMAN_REVIEW", "UNDETERMINED"}
+        and item["claim_id"] not in db.reviewed_claim_ids()
     ]
     return {
         "claims_ingested": len(db.list_claims()),
@@ -632,19 +741,28 @@ def metrics_endpoint(_: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUD
 
 @app.get("/api/model/metrics")
 @app.get("/api/v1/model/metrics")
-def get_model_metrics(_: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> dict:
+def get_model_metrics(
+    _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR")),
+) -> dict:
     result = model_metrics()
     if result is None:
-        return {"status": "NOT_TRAINED", "message": "Run: python -m app.ml.train --regenerate --rows 3000"}
+        return {
+            "status": "NOT_TRAINED",
+            "message": "Run: python -m app.ml.train --regenerate --rows 3000",
+        }
     return {"status": "READY", **result}
 
 
 @app.get("/api/evaluation")
 @app.get("/api/v1/evaluation")
-def system_evaluation(_: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> dict:
+def system_evaluation(
+    _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR")),
+) -> dict:
     result = load_evaluation()
     if result is None:
-        raise HTTPException(503, "Evaluation artifact not found; run python -m app.evaluation")
+        raise HTTPException(
+            503, "Evaluation artifact not found; run python -m app.evaluation"
+        )
     return result
 
 
@@ -652,16 +770,25 @@ def system_evaluation(_: dict = Depends(require_roles("ANALYST", "REVIEWER", "AU
 # POLICY MANAGEMENT
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.get("/api/policies")
 @app.get("/api/v1/policies")
-def policies(_: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> list[dict]:
+def policies(
+    _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR")),
+) -> list[dict]:
     return get_index().records
 
 
 @app.post("/api/policies", status_code=201)
 @app.post("/api/v1/policies", status_code=201)
-def add_policy(request: PolicyIngestRequest, user: dict = Depends(require_roles("ADMIN"))) -> dict:
-    text = request.content_text.strip() if request.content_text else extract_pdf_text(request.pdf_base64 or "")
+def add_policy(
+    request: PolicyIngestRequest, user: dict = Depends(require_roles("ADMIN"))
+) -> dict:
+    text = (
+        request.content_text.strip()
+        if request.content_text
+        else extract_pdf_text(request.pdf_base64 or "")
+    )
     record = {
         "policy_id": request.policy_id,
         "version": request.version,
@@ -686,14 +813,21 @@ def add_policy(request: PolicyIngestRequest, user: dict = Depends(require_roles(
     db.append_audit(
         "POLICY-CORPUS",
         "POLICY_VERSION_ADDED",
-        {"policy_id": request.policy_id, "version": request.version, "actor": user["username"], "content_hash": record["content_hash"]},
+        {
+            "policy_id": request.policy_id,
+            "version": request.version,
+            "actor": user["username"],
+            "content_hash": record["content_hash"],
+        },
     )
     return record
 
 
 @app.post("/api/policies/{policy_id}/{version}/retire")
 @app.post("/api/v1/policies/{policy_id}/{version}/retire")
-def retire_policy(policy_id: str, version: str, user: dict = Depends(require_roles("ADMIN"))) -> dict:
+def retire_policy(
+    policy_id: str, version: str, user: dict = Depends(require_roles("ADMIN"))
+) -> dict:
     if not db.set_policy_status(policy_id, version, "RETIRED"):
         raise HTTPException(404, "Policy version not found")
     get_index.cache_clear()
@@ -707,7 +841,9 @@ def retire_policy(policy_id: str, version: str, user: dict = Depends(require_rol
 
 @app.get("/api/retrieval/metrics")
 @app.get("/api/v1/retrieval/metrics")
-def retrieval_metrics(_: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> dict:
+def retrieval_metrics(
+    _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR")),
+) -> dict:
     return evaluate_retrieval()
 
 
@@ -715,15 +851,20 @@ def retrieval_metrics(_: dict = Depends(require_roles("ANALYST", "REVIEWER", "AU
 # BUSINESS & ROI
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.post("/api/business/roi")
 @app.post("/api/v1/business/roi")
-def business_roi(assumptions: RoiAssumptions, _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR"))) -> dict:
+def business_roi(
+    assumptions: RoiAssumptions,
+    _: dict = Depends(require_roles("ANALYST", "REVIEWER", "AUDITOR")),
+) -> dict:
     return simulate_roi(assumptions.model_dump())
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # ADMIN ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════
+
 
 @app.post("/api/v1/admin/users", status_code=201)
 def admin_create_user(
@@ -788,6 +929,7 @@ def admin_llm_usage(
 # ═══════════════════════════════════════════════════════════════════════
 # OPS / DIAGNOSTICS
 # ═══════════════════════════════════════════════════════════════════════
+
 
 @app.get("/api/ops")
 @app.get("/api/v1/ops")

@@ -48,8 +48,14 @@ def _send_slack(webhook_url: str, message: dict[str, Any]) -> bool:
                 {
                     "type": "section",
                     "fields": [
-                        {"type": "mrkdwn", "text": f"*Level:* {message.get('level', 'INFO')}"},
-                        {"type": "mrkdwn", "text": f"*Type:* {message.get('alert_type', 'GENERAL')}"},
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Level:* {message.get('level', 'INFO')}",
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Type:* {message.get('alert_type', 'GENERAL')}",
+                        },
                     ],
                 },
                 {
@@ -105,7 +111,11 @@ def send_alert(
     results = {"logged": True, "slack": False, "email": False}
 
     # Always log
-    log_func = logger.warning if level in (AlertLevel.WARNING, AlertLevel.CRITICAL) else logger.info
+    log_func = (
+        logger.warning
+        if level in (AlertLevel.WARNING, AlertLevel.CRITICAL)
+        else logger.info
+    )
     log_func("ALERT [%s] %s: %s", level, alert_type, title)
 
     # Slack
@@ -125,6 +135,7 @@ def send_alert(
 
 
 # ── Convenience functions ─────────────────────────────────────────────
+
 
 def alert_review_queue_threshold(queue_size: int, threshold: int) -> dict:
     return send_alert(
@@ -154,7 +165,9 @@ def alert_model_drift(drift_report: dict[str, Any]) -> dict:
     )
 
 
-def alert_sla_breach(claim_id: str, duration_seconds: float, sla_seconds: float) -> dict:
+def alert_sla_breach(
+    claim_id: str, duration_seconds: float, sla_seconds: float
+) -> dict:
     return send_alert(
         alert_type=AlertType.INVESTIGATION_SLA_BREACH,
         level=AlertLevel.WARNING,

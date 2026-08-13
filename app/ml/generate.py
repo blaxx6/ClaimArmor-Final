@@ -19,8 +19,30 @@ SCENARIOS = (
     "identity_ambiguity",
 )
 
-FIRST_NAMES = ("Aarav", "Asha", "Diya", "Ishaan", "Maya", "Neha", "Rohan", "Sara", "Vikram", "Zoya")
-LAST_NAMES = ("Gupta", "Iyer", "Kapoor", "Mehta", "Nair", "Patel", "Rao", "Shah", "Sharma", "Singh")
+FIRST_NAMES = (
+    "Aarav",
+    "Asha",
+    "Diya",
+    "Ishaan",
+    "Maya",
+    "Neha",
+    "Rohan",
+    "Sara",
+    "Vikram",
+    "Zoya",
+)
+LAST_NAMES = (
+    "Gupta",
+    "Iyer",
+    "Kapoor",
+    "Mehta",
+    "Nair",
+    "Patel",
+    "Rao",
+    "Shah",
+    "Sharma",
+    "Singh",
+)
 
 
 def _random_date(rng: random.Random, start: date, end: date) -> date:
@@ -93,7 +115,15 @@ def generate_record(index: int, rng: random.Random) -> dict:
     # Controlled label noise prevents the model from merely memorising scenario rules.
     if rng.random() < 0.025:
         overpayment = 1 - overpayment
-    expected_route = "HOLD" if overpayment else ("HUMAN_REVIEW" if scenario in {"dual_employer_primary", "identity_ambiguity"} else "CLEAR")
+    expected_route = (
+        "HOLD"
+        if overpayment
+        else (
+            "HUMAN_REVIEW"
+            if scenario in {"dual_employer_primary", "identity_ambiguity"}
+            else "CLEAR"
+        )
+    )
     features = build_features(claim, timeline, match_confidence)
     return {
         **claim,
@@ -102,7 +132,9 @@ def generate_record(index: int, rng: random.Random) -> dict:
         "expected_primary_payer": primary,
         "expected_route": expected_route,
         "overpayment_label": overpayment,
-        "potential_overpayment_amount": round(amount * (rng.uniform(0.35, 0.95) if overpayment else 0), 2),
+        "potential_overpayment_amount": round(
+            amount * (rng.uniform(0.35, 0.95) if overpayment else 0), 2
+        ),
     }
 
 
@@ -122,10 +154,14 @@ def write_dataset(output: Path, rows: int = 3000, seed: int = 42) -> Path:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate synthetic ClaimArmor COB training data")
+    parser = argparse.ArgumentParser(
+        description="Generate synthetic ClaimArmor COB training data"
+    )
     parser.add_argument("--rows", type=int, default=3000)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--output", type=Path, default=Path("artifacts/synthetic_claims.csv"))
+    parser.add_argument(
+        "--output", type=Path, default=Path("artifacts/synthetic_claims.csv")
+    )
     args = parser.parse_args()
     path = write_dataset(args.output, args.rows, args.seed)
     print(f"Generated {args.rows} synthetic claims at {path}")
@@ -133,4 +169,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

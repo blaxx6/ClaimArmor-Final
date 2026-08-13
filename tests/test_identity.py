@@ -9,10 +9,21 @@ from app.identity_evaluation import evaluate_identity
 class IdentityTests(unittest.TestCase):
     def test_entity_bundle_contains_planned_domains(self):
         bundle = generate_entity_bundle(20, 5)
-        for domain in ("members", "dependants", "employers", "providers", "coverages", "eligibility", "claims", "identity_variants"):
+        for domain in (
+            "members",
+            "dependants",
+            "employers",
+            "providers",
+            "coverages",
+            "eligibility",
+            "claims",
+            "identity_variants",
+        ):
             self.assertIn(domain, bundle)
             self.assertTrue(bundle[domain])
-        self.assertTrue(all("expected_primary_payer" in claim for claim in bundle["claims"]))
+        self.assertTrue(
+            all("expected_primary_payer" in claim for claim in bundle["claims"])
+        )
 
     def test_identity_metrics_are_measured(self):
         metrics = evaluate_identity(sample_size=8, seed=7, output=None)

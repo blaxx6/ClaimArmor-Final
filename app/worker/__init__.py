@@ -22,11 +22,9 @@ def create_celery_app() -> Celery:
         task_serializer="json",
         accept_content=["json"],
         result_serializer="json",
-
         # Timezone
         timezone="UTC",
         enable_utc=True,
-
         # Task routing
         task_default_queue=settings.celery_task_default_queue,
         task_queues={
@@ -34,23 +32,18 @@ def create_celery_app() -> Celery:
             "claimarmor.high": {"exchange": "claimarmor", "routing_key": "high"},
             "claimarmor.bulk": {"exchange": "claimarmor", "routing_key": "bulk"},
         },
-
         # Reliability
         task_acks_late=True,
         worker_prefetch_multiplier=1,
         task_reject_on_worker_lost=True,
-
         # Result expiry
         result_expires=86400,  # 24 hours
-
         # Retry policy
         task_default_retry_delay=30,
         task_max_retries=3,
-
         # Worker
         worker_max_tasks_per_child=500,  # Prevent memory leaks
         worker_max_memory_per_child=512_000,  # 512 MB
-
         # Beat schedule (periodic tasks)
         beat_schedule={
             "drift-check-hourly": {

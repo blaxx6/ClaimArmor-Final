@@ -34,4 +34,3 @@ def simulate_roi(assumptions: dict) -> dict:
         "estimated_roi_percent": round(roi * 100, 1),
         "basis": "Scenario simulation using user-visible assumptions; not a forecast or guarantee.",
     }
-

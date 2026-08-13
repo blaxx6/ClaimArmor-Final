@@ -34,6 +34,7 @@ class TaskStatus(str, Enum):
 
 # ── Claim schemas ─────────────────────────────────────────────────────
 
+
 class ClaimInput(BaseModel):
     claim_id: str = Field(min_length=3, max_length=80)
     member_name: str = Field(min_length=2, max_length=120)
@@ -63,6 +64,7 @@ class ClaimInput(BaseModel):
 
 # ── Review schemas ────────────────────────────────────────────────────
 
+
 class ReviewRequest(BaseModel):
     reviewer: str = Field(min_length=2, max_length=80)
     action: str
@@ -73,12 +75,19 @@ class ReviewRequest(BaseModel):
     @classmethod
     def validate_action(cls, value: str) -> str:
         value = value.upper().strip()
-        if value not in {"APPROVE", "REJECT", "OVERRIDE", "REQUEST_INFORMATION", "REINVESTIGATE"}:
+        if value not in {
+            "APPROVE",
+            "REJECT",
+            "OVERRIDE",
+            "REQUEST_INFORMATION",
+            "REINVESTIGATE",
+        }:
             raise ValueError("unsupported review action")
         return value
 
 
 # ── Auth schemas ──────────────────────────────────────────────────────
+
 
 class LoginRequest(BaseModel):
     username: str = Field(min_length=2, max_length=80)
@@ -99,6 +108,7 @@ class RefreshTokenRequest(BaseModel):
 
 # ── Upload schemas ────────────────────────────────────────────────────
 
+
 class CsvUploadRequest(BaseModel):
     csv_text: str = Field(min_length=10, max_length=2_000_000)
 
@@ -113,6 +123,7 @@ class StreamSimulationRequest(BaseModel):
 
 # ── ROI schemas ───────────────────────────────────────────────────────
 
+
 class RoiAssumptions(BaseModel):
     annual_claims: int = Field(default=100_000, ge=1, le=1_000_000_000)
     average_claim_amount: float = Field(default=2500, gt=0, le=10_000_000)
@@ -126,6 +137,7 @@ class RoiAssumptions(BaseModel):
 
 
 # ── Policy schemas ────────────────────────────────────────────────────
+
 
 class PolicyIngestRequest(BaseModel):
     policy_id: str = Field(pattern=r"^[A-Z0-9_-]{3,80}$")
@@ -149,8 +161,10 @@ class PolicyIngestRequest(BaseModel):
 
 # ── Async task schemas ────────────────────────────────────────────────
 
+
 class AsyncTaskResponse(BaseModel):
     """Returned when an investigation is submitted to the async queue."""
+
     task_id: str
     claim_id: str
     status: TaskStatus = TaskStatus.QUEUED
@@ -159,6 +173,7 @@ class AsyncTaskResponse(BaseModel):
 
 class TaskStatusResponse(BaseModel):
     """Returned when polling for task completion."""
+
     task_id: str
     claim_id: str
     status: TaskStatus
@@ -169,6 +184,7 @@ class TaskStatusResponse(BaseModel):
 
 
 # ── Investigation result ──────────────────────────────────────────────
+
 
 class InvestigationResult(BaseModel):
     claim_id: str
@@ -188,6 +204,7 @@ class InvestigationResult(BaseModel):
 
 # ── Pagination ────────────────────────────────────────────────────────
 
+
 class PaginationParams(BaseModel):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=50, ge=1, le=500)
@@ -206,6 +223,7 @@ class PaginatedResponse(BaseModel):
 
 
 # ── Admin schemas ─────────────────────────────────────────────────────
+
 
 class CreateUserRequest(BaseModel):
     username: str = Field(min_length=3, max_length=80)

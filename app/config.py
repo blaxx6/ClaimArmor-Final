@@ -50,7 +50,9 @@ class Settings(BaseSettings):
     oidc_audience: str | None = None
 
     # Field-level encryption for PII columns
-    encryption_key: SecretStr | None = None  # Fernet key — generate via cryptography.fernet.Fernet.generate_key()
+    encryption_key: SecretStr | None = (
+        None  # Fernet key — generate via cryptography.fernet.Fernet.generate_key()
+    )
 
     # ── Multi-tenancy ─────────────────────────────────────────────────
     tenant_id: str = "default"
@@ -152,6 +154,7 @@ def get_settings() -> Settings:
 # The old ``load_local_env`` was called at import time by ``main.py``.
 # This shim preserves that call-site without functional change — Pydantic
 # Settings already reads ``.env`` on construction.
+
 
 def load_local_env(path: Path = Path(".env")) -> None:
     """No-op kept for backward compatibility; config is now via ``get_settings()``."""

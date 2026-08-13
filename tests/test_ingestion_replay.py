@@ -7,7 +7,16 @@ from app.services.ingestion import encode_synthetic_837, parse_synthetic_837
 
 class IngestionTests(unittest.TestCase):
     def test_edi_like_round_trip(self):
-        source = {"claim_id": "CLM-EDI-TEST", "member_id": "MBR-1002", "member_name": "Rohan Kapoor", "member_dob": "1988-11-03", "service_date": "2026-08-05", "amount": 20000, "submitted_payer": "EMPLOYER_PLAN", "accident_related": True}
+        source = {
+            "claim_id": "CLM-EDI-TEST",
+            "member_id": "MBR-1002",
+            "member_name": "Rohan Kapoor",
+            "member_dob": "1988-11-03",
+            "service_date": "2026-08-05",
+            "amount": 20000,
+            "submitted_payer": "EMPLOYER_PLAN",
+            "accident_related": True,
+        }
         parsed = parse_synthetic_837(encode_synthetic_837(source))
         self.assertEqual(parsed[0].claim_id, source["claim_id"])
         self.assertTrue(parsed[0].accident_related)

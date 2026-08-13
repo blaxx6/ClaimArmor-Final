@@ -23,10 +23,16 @@ FEATURE_NAMES = [
 def age_on(dob: str | date, service_date: str | date) -> int:
     born = date.fromisoformat(str(dob))
     serviced = date.fromisoformat(str(service_date))
-    return serviced.year - born.year - ((serviced.month, serviced.day) < (born.month, born.day))
+    return (
+        serviced.year
+        - born.year
+        - ((serviced.month, serviced.day) < (born.month, born.day))
+    )
 
 
-def build_features(claim: dict, timeline: list[dict], match_confidence: float) -> dict[str, float]:
+def build_features(
+    claim: dict, timeline: list[dict], match_confidence: float
+) -> dict[str, float]:
     active = [item for item in timeline if item.get("active_on_service_date", True)]
     kinds = {item["kind"] for item in active}
     submitted = claim["submitted_payer"].upper()
@@ -45,4 +51,3 @@ def build_features(claim: dict, timeline: list[dict], match_confidence: float) -
         "submitted_is_auto": float("AUTO" in submitted),
         "coverage_overlap": float(len(active) > 1),
     }
-

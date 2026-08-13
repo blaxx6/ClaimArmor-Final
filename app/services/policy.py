@@ -18,7 +18,13 @@ TRUSTED_PREFIXES = (
     "https://www.ecfr.gov/",
     "https://www.medicare.gov/",
 )
-INJECTION_MARKERS = ("ignore previous instructions", "system prompt", "developer message", "reveal secrets", "override safeguards")
+INJECTION_MARKERS = (
+    "ignore previous instructions",
+    "system prompt",
+    "developer message",
+    "reveal secrets",
+    "override safeguards",
+)
 DOMAIN_EXPANSIONS = {
     "auto": "accident liability no-fault",
     "car": "accident auto liability no-fault",
@@ -30,7 +36,13 @@ DOMAIN_EXPANSIONS = {
 
 
 def _hash(record: dict) -> str:
-    stable = json.dumps({key: record[key] for key in ("policy_id", "title", "section", "source_url", "text")}, sort_keys=True)
+    stable = json.dumps(
+        {
+            key: record[key]
+            for key in ("policy_id", "title", "section", "source_url", "text")
+        },
+        sort_keys=True,
+    )
     return hashlib.sha256(stable.encode()).hexdigest()
 
 
@@ -39,7 +51,9 @@ def validate_policy_record(record: dict) -> None:
         raise ValueError(f"Untrusted policy source: {record['source_url']}")
     lowered = record["text"].casefold()
     if any(marker in lowered for marker in INJECTION_MARKERS):
-        raise ValueError(f"Potential prompt injection in policy record: {record['policy_id']}")
+        raise ValueError(
+            f"Potential prompt injection in policy record: {record['policy_id']}"
+        )
 
 
 def extract_pdf_text(encoded_pdf: str) -> str:
@@ -76,8 +90,13 @@ class PolicyIndex:
             validate_policy_record(record)
             record["document_hash"] = _hash(record)
         self.records = records
-        self.vectorizer = TfidfVectorizer(stop_words="english", ngram_range=(1, 2), sublinear_tf=True)
-        corpus = [f"{' '.join(item['topics'])} {item['title']} {item['section']} {item['text']}" for item in records]
+        self.vectorizer = TfidfVectorizer(
+            stop_words="english", ngram_range=(1, 2), sublinear_tf=True
+        )
+        corpus = [
+            f"{' '.join(item['topics'])} {item['title']} {item['section']} {item['text']}"
+            for item in records
+        ]
         self.matrix = self.vectorizer.fit_transform(corpus)
 
     def search(self, query: str, limit: int = 4) -> list[dict]:
@@ -86,13 +105,20 @@ class PolicyIndex:
         for phrase, expansion in DOMAIN_EXPANSIONS.items():
             if phrase in lowered:
                 expanded += f" {expansion}"
-        scores = cosine_similarity(self.vectorizer.transform([expanded]), self.matrix)[0]
+        scores = cosine_similarity(self.vectorizer.transform([expanded]), self.matrix)[
+            0
+        ]
         order = scores.argsort()[::-1]
         results = []
         for index in order[:limit]:
             if scores[index] <= 0:
                 continue
-            results.append({**self.records[int(index)], "retrieval_score": round(float(scores[index]), 4)})
+            results.append(
+                {
+                    **self.records[int(index)],
+                    "retrieval_score": round(float(scores[index]), 4),
+                }
+            )
         return results
 
 
@@ -122,5 +148,12 @@ def evaluate_retrieval() -> dict:
         rank = ids.index(expected) + 1 if expected in ids else None
         hits += int(rank is not None)
         reciprocal_ranks.append(1 / rank if rank else 0)
-        details.append({"query": query, "expected": expected, "rank": rank, "retrieved": ids})
-    return {"cases": len(cases), "hit_at_4": round(hits / len(cases), 4), "mrr": round(sum(reciprocal_ranks) / len(cases), 4), "details": details}
+        details.append(
+            {"query": query, "expected": expected, "rank": rank, "retrieved": ids}
+        )
+    return {
+        "cases": len(cases),
+        "hit_at_4": round(hits / len(cases), 4),
+        "mrr": round(sum(reciprocal_ranks) / len(cases), 4),
+        "details": details,
+    }

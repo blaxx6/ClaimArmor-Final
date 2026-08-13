@@ -1,2 +1,1 @@
 """ClaimArmor AI application package."""
-

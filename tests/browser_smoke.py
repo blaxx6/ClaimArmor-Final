@@ -24,4 +24,6 @@ with sync_playwright() as playwright:
     assert "Seven-agent trace" in page.locator("body").inner_text()
     browser.close()
 
-print("React browser smoke test passed: login -> create -> ingestion controls -> investigate -> cited HOLD result")
+print(
+    "React browser smoke test passed: login -> create -> ingestion controls -> investigate -> cited HOLD result"
+)
