@@ -58,7 +58,9 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Generate test data
-        run: python -m app.data_generation
+        run: |
+          python -m app.data_generation
+          python -m app.ml.generate
 
       - name: Run tests
         run: |
