@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (
@@ -146,16 +147,37 @@ llm_usage_table = Table(
 # ── Engine management (connection pooling) ────────────────────────────
 
 _ENGINE = None
+_ENGINE_URL: str | None = None
+
+
+def _sqlite_path_from_url(url: str) -> Path:
+    if url.startswith("sqlite:///"):
+        return Path(url.removeprefix("sqlite:///"))
+    return Path("claimarmor.db")
+
+
+DB_PATH = _sqlite_path_from_url(get_settings().database_url)
+
+
+def _effective_database_url() -> str:
+    url = get_settings().database_url
+    if url.startswith("sqlite") and DB_PATH:
+        return f"sqlite:///{DB_PATH}"
+    return url
 
 
 def _engine():
     """Return a singleton engine with proper connection pooling."""
-    global _ENGINE
-    if _ENGINE is not None:
+    global _ENGINE, _ENGINE_URL
+    url = _effective_database_url()
+    if _ENGINE is not None and _ENGINE_URL == url:
         return _ENGINE
 
+    if _ENGINE is not None:
+        _ENGINE.dispose()
+        _ENGINE = None
+
     settings = get_settings()
-    url = settings.database_url
 
     if url.startswith("sqlite"):
         _ENGINE = create_engine(
@@ -175,11 +197,12 @@ def _engine():
             pool_pre_ping=True,  # Test connections before use
             echo=settings.db_echo,
         )
+    _ENGINE_URL = url
     return _ENGINE
 
 
 def database_url() -> str:
-    return get_settings().database_url
+    return _effective_database_url()
 
 
 def _now() -> str:
@@ -198,10 +221,11 @@ def init_db() -> None:
 
 def dispose_engine() -> None:
     """Dispose the connection pool (for testing/shutdown)."""
-    global _ENGINE
+    global _ENGINE, _ENGINE_URL
     if _ENGINE is not None:
         _ENGINE.dispose()
         _ENGINE = None
+        _ENGINE_URL = None
 
 
 def storage_info() -> dict:

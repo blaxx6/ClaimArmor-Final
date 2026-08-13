@@ -22,7 +22,7 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.config import get_settings, load_local_env
@@ -671,7 +671,7 @@ def add_policy(request: PolicyIngestRequest, user: dict = Depends(require_roles(
         "authority": request.authority,
         "jurisdiction": request.jurisdiction,
         "effective_date": request.effective_date.isoformat(),
-        "last_verified": date.today().isoformat(),
+        "last_verified": datetime.now(timezone.utc).date().isoformat(),
         "topics": [topic.strip()[:80] for topic in request.topics],
         "text": text,
         "status": "ACTIVE",

@@ -1,7 +1,21 @@
 import re
+from typing import Any
 
 import pytest
-from playwright.sync_api import Page, expect
+
+try:
+    from playwright.sync_api import Page, expect
+
+    PLAYWRIGHT_AVAILABLE = True
+except ModuleNotFoundError:
+    PLAYWRIGHT_AVAILABLE = False
+    Page = Any
+    expect = None
+
+pytestmark = pytest.mark.skipif(
+    not PLAYWRIGHT_AVAILABLE,
+    reason="Playwright is not installed in this test environment",
+)
 
 # Base URL for the local frontend/API server
 BASE_URL = "http://localhost:5173"

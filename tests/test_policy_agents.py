@@ -43,7 +43,7 @@ class PolicyAndAgentTests(unittest.TestCase):
         risk = score_risk(claim, timeline, match["confidence"])
         rules = evaluate_rules(claim, timeline)
 
-        def structured(role, _instructions, _context, fallback):
+        def structured(role, _instructions, _context, fallback, provider=None):
             return fallback, {"mode": "gemini", "used": True, "model": "gemini-test", "role": role, "structured": True}
 
         with patch("app.services.agents.run_structured_agent", side_effect=structured) as calls, patch("app.services.agents.enhance_explanation", return_value=("Live explanation", {"mode": "gemini", "used": True, "model": "gemini-test"})) as explanation:

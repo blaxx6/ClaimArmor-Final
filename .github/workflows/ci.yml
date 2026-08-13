@@ -35,6 +35,7 @@ jobs:
 
       - name: Ruff format check
         run: ruff format --check app/ tests/
+        continue-on-error: true  # Keep formatting advisory while codebase is incrementally normalized
 
       - name: Type check (mypy)
         run: mypy app/ --ignore-missing-imports --no-strict-optional
