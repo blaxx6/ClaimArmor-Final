@@ -8,7 +8,6 @@ Alerts are triggered when PSI > threshold (default 0.2).
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -59,7 +58,7 @@ def compute_drift_report(
     If no recent claims are provided, loads them from the database.
     """
     import pandas as pd
-    from app.ml.features import build_features
+
 
     settings = get_settings()
 

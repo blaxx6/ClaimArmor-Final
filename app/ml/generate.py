@@ -8,7 +8,6 @@ from pathlib import Path
 
 from app.ml.features import build_features
 
-
 SCENARIOS = (
     "single_employer",
     "single_medicare",

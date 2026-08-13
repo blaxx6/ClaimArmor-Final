@@ -3,7 +3,6 @@ from __future__ import annotations
 import math
 from datetime import date
 
-
 FEATURE_NAMES = [
     "claim_amount_log",
     "active_coverage_count",

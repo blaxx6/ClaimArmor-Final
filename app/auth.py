@@ -15,18 +15,17 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import secrets
 import time
 import uuid
 from collections import defaultdict, deque
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Depends, Header, HTTPException
 
 from app import db
 from app.config import get_settings
-
 
 # ── Demo seed users (development only) ────────────────────────────────
 DEMO_USERS = {

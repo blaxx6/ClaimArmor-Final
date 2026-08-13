@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import hashlib
 import base64
+import hashlib
 import io
 import json
 import re
@@ -10,7 +10,6 @@ from pathlib import Path
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
 
 POLICY_PATH = Path("data/policies/cms_msp_chunks.json")
 TRUSTED_PREFIXES = (

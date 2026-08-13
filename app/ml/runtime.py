@@ -10,7 +10,6 @@ import pandas as pd
 
 from app.ml.features import FEATURE_NAMES, build_features
 
-
 MODEL_PATH = Path(os.getenv("CLAIMARMOR_MODEL", "artifacts/risk_model.joblib"))
 METRICS_PATH = Path(os.getenv("CLAIMARMOR_MODEL_METRICS", "artifacts/model_metrics.json"))
 

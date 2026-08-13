@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import io
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import date
 from difflib import SequenceMatcher
-from contextlib import redirect_stderr, redirect_stdout
-import io
-from typing import Any
 
 import pandas as pd
 
@@ -36,8 +35,8 @@ def _format_match(candidates: list[dict], method: str) -> dict:
 
 def match_member(claim: dict, members: list[dict]) -> dict:
     try:
-        from splink import DuckDBAPI, Linker, SettingsCreator, block_on
         import splink.comparison_library as cl
+        from splink import DuckDBAPI, Linker, SettingsCreator, block_on
 
         query = {"unique_id": "CLAIM_QUERY", "name": claim["member_name"], "dob": str(claim["member_dob"]), "email": claim.get("member_email") or "", "phone": claim.get("member_phone") or "", "address": claim.get("member_address") or "", "member_id": claim.get("member_id") or ""}
         catalogue = [{"unique_id": item["member_id"], "name": item["name"], "dob": item["dob"], "email": item.get("email", ""), "phone": item.get("phone", ""), "address": item.get("address", ""), "member_id": item["member_id"]} for item in members]

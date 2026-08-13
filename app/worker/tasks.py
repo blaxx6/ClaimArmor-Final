@@ -100,7 +100,6 @@ def batch_investigate(
     tenant_id: str = "default",
 ) -> dict[str, Any]:
     """Batch investigate multiple claims (for CSV/EDI uploads)."""
-    from app import db
 
     results = {"processed": 0, "failed": 0, "claim_results": []}
 
@@ -133,8 +132,9 @@ def retrain_model(
 ) -> dict[str, Any]:
     """Retrain the risk model and log to MLflow if configured."""
     from pathlib import Path
-    from app.ml.train import train
+
     from app.ml.generate import write_dataset
+    from app.ml.train import train
 
     dataset_path = Path("artifacts/synthetic_claims.csv")
     model_path = Path("artifacts/risk_model.joblib")
@@ -181,6 +181,7 @@ def check_model_drift() -> dict[str, Any]:
 def cleanup_expired_tasks() -> dict[str, int]:
     """Remove task records older than 7 days."""
     from datetime import datetime, timedelta, timezone
+
     from sqlalchemy import delete as sql_delete
 
     from app import db as db_module

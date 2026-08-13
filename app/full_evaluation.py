@@ -10,8 +10,11 @@ from app.evaluation import evaluate
 from app.identity_evaluation import evaluate_identity
 from app.seed import DEMO_CLAIMS
 from app.services.pipeline import investigate
-from app.services.policy import INJECTION_MARKERS, evaluate_retrieval, validate_policy_record
-
+from app.services.policy import (
+    INJECTION_MARKERS,
+    evaluate_retrieval,
+    validate_policy_record,
+)
 
 OUTPUT = Path("artifacts/full_system_evaluation.json")
 

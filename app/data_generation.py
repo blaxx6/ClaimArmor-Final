@@ -6,7 +6,6 @@ import random
 from datetime import date, timedelta
 from pathlib import Path
 
-
 FIRST = ("Aarav", "Asha", "Diya", "Ishaan", "Maya", "Neha", "Rohan", "Sara", "Vikram", "Zoya")
 LAST = ("Gupta", "Iyer", "Kapoor", "Mehta", "Nair", "Patel", "Rao", "Shah", "Sharma", "Singh")
 STREETS = ("Lake Road", "Park Street", "Hill Avenue", "River Drive", "Maple Lane")

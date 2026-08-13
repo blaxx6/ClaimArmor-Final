@@ -1,6 +1,7 @@
 import re
-from playwright.sync_api import Page, expect
+
 import pytest
+from playwright.sync_api import Page, expect
 
 # Base URL for the local frontend/API server
 BASE_URL = "http://localhost:5173"

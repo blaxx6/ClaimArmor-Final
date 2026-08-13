@@ -7,12 +7,18 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
-from sklearn.metrics import accuracy_score, average_precision_score, confusion_matrix, f1_score, precision_score, recall_score
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+)
 from sklearn.model_selection import train_test_split
 
 from app.ml.features import FEATURE_NAMES
 from app.services.policy import evaluate_retrieval
-
 
 DEFAULT_DATASET = Path("artifacts/synthetic_claims.csv")
 DEFAULT_MODEL = Path("artifacts/risk_model.joblib")
@@ -79,8 +85,8 @@ def evaluate(dataset_path: Path = DEFAULT_DATASET, model_path: Path = DEFAULT_MO
     retrieval = evaluate_retrieval()
     result = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "dataset_rows": int(len(complete_frame)),
-        "evaluation_rows": int(len(frame)),
+        "dataset_rows": len(complete_frame),
+        "evaluation_rows": len(frame),
         "evaluation_split": "Reproduced 22% stratified holdout (random seed 42); these rows were not used to fit the persisted model.",
         "dataset": str(dataset_path),
         "model_version": bundle["metrics"]["model_version"],

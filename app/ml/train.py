@@ -7,9 +7,18 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.metrics import accuracy_score, average_precision_score, brier_score_loss, confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+    brier_score_loss,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from sklearn.model_selection import train_test_split
 
 from app.ml.features import FEATURE_NAMES
@@ -52,9 +61,9 @@ def train(dataset: Path, model_path: Path, metrics_path: Path, seed: int = 42) -
         "model_type": model_type,
         "model_version": "overpayment-risk-v2-calibrated",
         "trained_at": datetime.now(timezone.utc).isoformat(),
-        "dataset_rows": int(len(frame)),
-        "training_rows": int(len(train_frame)),
-        "test_rows": int(len(test_frame)),
+        "dataset_rows": len(frame),
+        "training_rows": len(train_frame),
+        "test_rows": len(test_frame),
         "positive_rate": round(float(frame["overpayment_label"].mean()), 4),
         "threshold": 0.50,
         "accuracy": round(float(accuracy_score(test_frame["overpayment_label"], predictions)), 4),

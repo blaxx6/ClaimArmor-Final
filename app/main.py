@@ -19,10 +19,8 @@ import hashlib
 import io
 import json
 import logging
-import os
 import time
 import uuid
-from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -68,15 +66,14 @@ except ImportError:
 
 from app import db
 from app.auth import (
+    _check_rate_limit,
     authenticate,
     create_user,
     current_user,
     issue_token_pair,
     refresh_access_token,
     require_roles,
-    require_tenant,
     seed_users,
-    _check_rate_limit,
 )
 from app.evaluation import load_evaluation
 from app.ml.runtime import metrics as model_metrics
@@ -99,8 +96,12 @@ from app.seed import DEMO_CLAIMS
 from app.services.business import simulate_roi
 from app.services.ingestion import parse_synthetic_837
 from app.services.pipeline import investigate, investigate_events
-from app.services.policy import evaluate_retrieval, extract_pdf_text, get_index, validate_policy_record
-
+from app.services.policy import (
+    evaluate_retrieval,
+    extract_pdf_text,
+    get_index,
+    validate_policy_record,
+)
 
 # ── Logging setup ─────────────────────────────────────────────────────
 settings = get_settings()

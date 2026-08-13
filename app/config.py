@@ -7,7 +7,6 @@ with a validated, documented, secrets-aware settings object.
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -154,6 +153,6 @@ def get_settings() -> Settings:
 # This shim preserves that call-site without functional change — Pydantic
 # Settings already reads ``.env`` on construction.
 
-def load_local_env(path: Path = Path(".env")) -> None:  # noqa: ARG001
+def load_local_env(path: Path = Path(".env")) -> None:
     """No-op kept for backward compatibility; config is now via ``get_settings()``."""
     _ = get_settings()
