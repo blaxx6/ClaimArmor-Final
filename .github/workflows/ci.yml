@@ -61,6 +61,7 @@ jobs:
         run: |
           python -m app.data_generation
           python -m app.ml.generate
+          python -m app.ml.train
 
       - name: Run tests
         run: |
