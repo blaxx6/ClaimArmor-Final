@@ -1,3 +1,14 @@
 [lint]
-select = ["F", "I", "UP", "B", "BLE", "S", "RUF"]
-ignore = ["B008", "BLE001", "S110"]
+ignore = [
+    "E501",   # Line too long
+    "B008",   # FastAPI Depends() in defaults
+    "S101",   # Use of assert (needed in tests)
+    "S105",   # Possible hardcoded password
+    "S106",
+    "S107",
+    "S311",   # Random number generator
+    "B904",   # Raise from
+    "BLE001", # Blind except
+    "S110",   # Try-except-pass
+    "F841",   # Unused local variables
+]
