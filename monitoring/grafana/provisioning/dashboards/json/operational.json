@@ -1,0 +1,94 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "claimarmor-operational",
+    "title": "ClaimArmor AI — Operational Dashboard",
+    "tags": ["claimarmor", "operational"],
+    "timezone": "utc",
+    "refresh": "30s",
+    "panels": [
+      {
+        "title": "Request Rate (req/s)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(claimarmor_http_requests_total[5m])",
+            "legendFormat": "{{method}} {{path}} {{status}}"
+          }
+        ]
+      },
+      {
+        "title": "P95 Latency (seconds)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(claimarmor_http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(claimarmor_http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P50"
+          }
+        ]
+      },
+      {
+        "title": "Error Rate (5xx)",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(claimarmor_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(claimarmor_http_requests_total[5m])) * 100",
+            "legendFormat": "Error %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Investigations Total",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(claimarmor_investigations_total)",
+            "legendFormat": "Total"
+          }
+        ]
+      },
+      {
+        "title": "Investigations by Route",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "sum by (route) (claimarmor_investigations_total)",
+            "legendFormat": "{{route}}"
+          }
+        ]
+      },
+      {
+        "title": "Investigation Rate by Mode",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+        "targets": [
+          {
+            "expr": "rate(claimarmor_investigations_total[5m])",
+            "legendFormat": "{{route}} ({{mode}})"
+          }
+        ]
+      }
+    ]
+  }
+}

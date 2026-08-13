@@ -1,0 +1,122 @@
+name: CD — Deploy to Production (Canary)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker image tag to deploy"
+        required: true
+        type: string
+      canary_weight:
+        description: "Canary traffic percentage (0-100)"
+        required: false
+        default: "10"
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  canary-deploy:
+    name: Canary Deployment
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.29.0"
+
+      - name: Configure kubeconfig
+        run: echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+
+      - name: Deploy canary ({{ inputs.canary_weight }}% traffic)
+        run: |
+          # Update canary deployment
+          kubectl set image deployment/claimarmor-api-canary \
+            claimarmor=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }} \
+            -n claimarmor
+
+          # Set canary traffic weight
+          kubectl annotate ingress claimarmor-ingress \
+            nginx.ingress.kubernetes.io/canary="true" \
+            nginx.ingress.kubernetes.io/canary-weight="${{ inputs.canary_weight }}" \
+            -n claimarmor --overwrite
+
+          kubectl rollout status deployment/claimarmor-api-canary \
+            -n claimarmor --timeout=300s
+
+      - name: Smoke test canary
+        run: |
+          PROD_URL="${{ secrets.PRODUCTION_URL }}"
+          for i in $(seq 1 5); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${PROD_URL}/api/health")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Canary healthy (attempt $i)"
+            else
+              echo "❌ Canary returned HTTP $HTTP_CODE"
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Wait for monitoring validation
+        run: |
+          echo "⏳ Waiting 5 minutes for error rate validation..."
+          sleep 300
+
+  promote:
+    name: Promote to Full Production
+    runs-on: ubuntu-latest
+    needs: canary-deploy
+    environment: production-promote
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.29.0"
+
+      - name: Configure kubeconfig
+        run: echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+
+      - name: Promote to production
+        run: |
+          # Update main deployment
+          kubectl set image deployment/claimarmor-api \
+            claimarmor=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }} \
+            -n claimarmor
+
+          kubectl set image deployment/claimarmor-worker \
+            worker=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }} \
+            -n claimarmor
+
+          # Remove canary
+          kubectl annotate ingress claimarmor-ingress \
+            nginx.ingress.kubernetes.io/canary- \
+            nginx.ingress.kubernetes.io/canary-weight- \
+            -n claimarmor --overwrite
+
+          # Wait for rollout
+          kubectl rollout status deployment/claimarmor-api \
+            -n claimarmor --timeout=300s
+          kubectl rollout status deployment/claimarmor-worker \
+            -n claimarmor --timeout=300s
+
+      - name: Final health check
+        run: |
+          PROD_URL="${{ secrets.PRODUCTION_URL }}"
+          for i in $(seq 1 10); do
+            if curl -sf "${PROD_URL}/api/health" | grep -q "healthy"; then
+              echo "✅ Production is healthy"
+              exit 0
+            fi
+            echo "Waiting for production... attempt $i"
+            sleep 10
+          done
+          echo "❌ Production health check failed"
+          exit 1

@@ -1,0 +1,13 @@
+apiVersion: v2
+name: claimarmor
+description: ClaimArmor AI — Pre-payment COB audit system
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+maintainers:
+  - name: ClaimArmor Team
+keywords:
+  - healthcare
+  - fraud-detection
+  - ai
+  - claims-processing

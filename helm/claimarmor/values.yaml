@@ -1,0 +1,140 @@
+# Default values for claimarmor Helm chart
+
+replicaCount:
+  api: 3
+  worker: 2
+  workerBulk: 1
+  beat: 1
+
+image:
+  repository: ghcr.io/claimarmor/claimarmor-ai
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: "claimarmor"
+
+# ── Application Configuration ─────────────────────────────────────────
+config:
+  environment: "production"
+  logLevel: "INFO"
+  logFormat: "json"
+  llmMode: "offline"
+  dbPoolSize: "10"
+  dbMaxOverflow: "20"
+  corsOrigins: '["https://app.claimarmor.ai"]'
+  rateLimitRequestsPerMinute: "60"
+  rateLimitLoginPerMinute: "10"
+  prometheusEnabled: "true"
+  driftPsiThreshold: "0.2"
+
+# ── Secrets (override via --set or external secrets) ──────────────────
+secrets:
+  databaseUrl: "postgresql+psycopg://claimarmor:CHANGE_ME@postgres:5432/claimarmor"
+  authSecret: "CHANGE_ME_TO_RANDOM_256BIT_SECRET"
+  redisUrl: "redis://redis:6379/0"
+  celeryBrokerUrl: "redis://redis:6379/0"
+  # geminiApiKey: ""
+  # openaiApiKey: ""
+  # encryptionKey: ""
+
+# ── API Service ───────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+# ── Ingress ───────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: api.claimarmor.ai
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: claimarmor-tls
+      hosts:
+        - api.claimarmor.ai
+
+# ── Resource Limits ───────────────────────────────────────────────────
+resources:
+  api:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  worker:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  beat:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# ── Autoscaling ───────────────────────────────────────────────────────
+autoscaling:
+  api:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPU: 70
+    targetMemory: 80
+  worker:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPU: 75
+
+# ── Pod Disruption Budgets ────────────────────────────────────────────
+pdb:
+  api:
+    minAvailable: 2
+  worker:
+    minAvailable: 1
+
+# ── Health Probes ─────────────────────────────────────────────────────
+probes:
+  liveness:
+    path: /api/health
+    initialDelaySeconds: 15
+    periodSeconds: 30
+  readiness:
+    path: /api/health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  startup:
+    path: /api/health
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 10
+
+# ── PostgreSQL (Bitnami subchart) ─────────────────────────────────────
+postgresql:
+  enabled: false  # Use external managed database in production
+  auth:
+    database: claimarmor
+    username: claimarmor
+
+# ── Redis (Bitnami subchart) ─────────────────────────────────────────
+redis:
+  enabled: false  # Use external managed Redis in production

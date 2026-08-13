@@ -1,0 +1,26 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "claimarmor-api"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["claimarmor:8000"]
+        labels:
+          service: "claimarmor-api"
+
+  - job_name: "flower"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["flower:5555"]
+        labels:
+          service: "celery-flower"
+
+rule_files:
+  - "/etc/prometheus/alerts.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []

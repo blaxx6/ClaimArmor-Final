@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: claimarmor-config
+  namespace: claimarmor
+  labels:
+    app.kubernetes.io/name: claimarmor
+data:
+  CLAIMARMOR_ENVIRONMENT: "production"
+  CLAIMARMOR_LOG_FORMAT: "json"
+  CLAIMARMOR_LOG_LEVEL: "INFO"
+  CLAIMARMOR_LLM_MODE: "offline"
+  CLAIMARMOR_DB_POOL_SIZE: "10"
+  CLAIMARMOR_DB_MAX_OVERFLOW: "20"
+  CLAIMARMOR_CORS_ORIGINS: '["https://app.claimarmor.ai"]'
+  CLAIMARMOR_RATE_LIMIT_REQUESTS_PER_MINUTE: "60"
+  CLAIMARMOR_RATE_LIMIT_LOGIN_PER_MINUTE: "10"
+  CLAIMARMOR_PROMETHEUS_ENABLED: "true"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: claimarmor-secrets
+  namespace: claimarmor
+  labels:
+    app.kubernetes.io/name: claimarmor
+type: Opaque
+stringData:
+  # IMPORTANT: Replace these in production!
+  CLAIMARMOR_DATABASE_URL: "postgresql+psycopg://claimarmor:CHANGE_ME@postgres:5432/claimarmor"
+  CLAIMARMOR_AUTH_SECRET: "CHANGE_ME_TO_RANDOM_256BIT_SECRET"
+  CLAIMARMOR_REDIS_URL: "redis://redis:6379/0"
+  CLAIMARMOR_CELERY_BROKER_URL: "redis://redis:6379/0"
+  # Uncomment and set for LLM integration
+  # GEMINI_API_KEY: ""
+  # OPENAI_API_KEY: ""

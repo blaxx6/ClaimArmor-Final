@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: claimarmor
+  labels:
+    app.kubernetes.io/name: claimarmor
+    app.kubernetes.io/part-of: claimarmor-ai

@@ -1,0 +1,191 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claimarmor-api
+  namespace: claimarmor
+  labels:
+    app.kubernetes.io/name: claimarmor
+    app.kubernetes.io/component: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: claimarmor
+      app.kubernetes.io/component: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: claimarmor
+        app.kubernetes.io/component: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: claimarmor
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: claimarmor
+          image: ghcr.io/claimarmor/claimarmor-ai:latest
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: claimarmor-config
+            - secretRef:
+                name: claimarmor-secrets
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 10
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claimarmor-worker
+  namespace: claimarmor
+  labels:
+    app.kubernetes.io/name: claimarmor
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: claimarmor
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: claimarmor
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: claimarmor
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: worker
+          image: ghcr.io/claimarmor/claimarmor-ai:latest
+          command:
+            - python
+            - -m
+            - celery
+            - -A
+            - app.worker
+            - worker
+            - --loglevel=info
+            - --queues=claimarmor,claimarmor.high
+            - --concurrency=4
+            - --max-tasks-per-child=500
+          envFrom:
+            - configMapRef:
+                name: claimarmor-config
+            - secretRef:
+                name: claimarmor-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -m
+                - celery
+                - -A
+                - app.worker
+                - inspect
+                - ping
+                - --timeout=10
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 15
+      terminationGracePeriodSeconds: 120  # Allow tasks to finish
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claimarmor-beat
+  namespace: claimarmor
+  labels:
+    app.kubernetes.io/name: claimarmor
+    app.kubernetes.io/component: beat
+spec:
+  replicas: 1  # Only one Beat scheduler
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: claimarmor
+      app.kubernetes.io/component: beat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: claimarmor
+        app.kubernetes.io/component: beat
+    spec:
+      serviceAccountName: claimarmor
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: beat
+          image: ghcr.io/claimarmor/claimarmor-ai:latest
+          command:
+            - python
+            - -m
+            - celery
+            - -A
+            - app.worker
+            - beat
+            - --loglevel=info
+          envFrom:
+            - configMapRef:
+                name: claimarmor-config
+            - secretRef:
+                name: claimarmor-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
