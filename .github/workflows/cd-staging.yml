@@ -1,6 +1,9 @@
 name: CD — Deploy to Staging
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 env:
@@ -55,41 +58,71 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy-staging:
-    name: Deploy to Staging
+    name: Deploy to Staging (Kind Cluster)
     runs-on: ubuntu-latest
     needs: build-and-push
     environment: staging
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.10.0
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
         with:
-          version: "v1.29.0"
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure kubeconfig
+      - name: Load image into Kind
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          kind load docker-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} -n chart-testing
 
-      - name: Deploy to staging
+      - name: Deploy to Kind
         run: |
+          # Apply namespace
+          kubectl apply -f k8s/namespace.yaml
+          
+          # Create mock secret for ghcr.io pull if needed
+          # In this demo, we assume the repository and its packages are public.
+          
+          # Apply configmap and empty secrets
+          kubectl apply -f k8s/configmap.yaml
+          kubectl create secret generic claimarmor-secrets -n claimarmor --from-literal=CLAIMARMOR_AUTH_SECRET=demo-secret
+          
+          # Apply deployments
+          kubectl apply -f k8s/deployments.yaml
+          
+          # Apply service
+          kubectl apply -f k8s/service-ingress.yaml
+
+          # Update images
           kubectl set image deployment/claimarmor-api \
             claimarmor=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            -n claimarmor-staging
+            -n claimarmor
 
           kubectl set image deployment/claimarmor-worker \
             worker=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            -n claimarmor-staging
+            -n claimarmor
+            
+          kubectl set image deployment/claimarmor-beat \
+            beat=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            -n claimarmor
 
           kubectl rollout status deployment/claimarmor-api \
-            -n claimarmor-staging --timeout=300s
+            -n claimarmor --timeout=300s
+
+      - name: Port-forward for Smoke test
+        run: |
+          kubectl port-forward svc/claimarmor-api 8000:80 -n claimarmor &
+          sleep 5
 
       - name: Smoke test
         run: |
-          STAGING_URL="${{ secrets.STAGING_URL }}"
           for i in $(seq 1 10); do
-            if curl -sf "${STAGING_URL}/api/health" | grep -q "healthy"; then
+            if curl -sf "http://localhost:8000/api/health" | grep -q "healthy"; then
               echo "✅ Staging is healthy"
               exit 0
             fi

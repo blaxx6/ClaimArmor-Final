@@ -1,12 +1,16 @@
 name: CD — Deploy to Production (Canary)
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Docker image tag to deploy"
+        description: "Docker image tag to deploy (e.g., git sha)"
         required: true
         type: string
+        default: "latest"
       canary_weight:
         description: "Canary traffic percentage (0-100)"
         required: false
@@ -16,46 +20,75 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  # If triggered by tag, use the tag name, otherwise use the provided input or git sha
+  IMAGE_TAG: ${{ github.event.inputs.image_tag || github.ref_name || github.sha }}
 
 jobs:
   canary-deploy:
-    name: Canary Deployment
+    name: Canary Deployment (Kind Cluster)
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: "v1.29.0"
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.10.0
 
-      - name: Configure kubeconfig
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load image into Kind
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          kind load docker-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} -n chart-testing
 
       - name: Deploy canary ({{ inputs.canary_weight }}% traffic)
         run: |
+          # Setup base infrastructure on Kind
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/configmap.yaml
+          kubectl create secret generic claimarmor-secrets -n claimarmor --from-literal=CLAIMARMOR_AUTH_SECRET=demo-secret
+          kubectl apply -f k8s/deployments.yaml
+          kubectl apply -f k8s/service-ingress.yaml
+          
+          # Initialize baseline deployment so canary has something to route against
+          kubectl set image deployment/claimarmor-api \
+            claimarmor=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            -n claimarmor
+          kubectl rollout status deployment/claimarmor-api -n claimarmor --timeout=300s
+
+          # Create canary deployment (duplicating standard deployment logic for POC)
+          kubectl get deployment claimarmor-api -n claimarmor -o yaml | \
+            sed 's/name: claimarmor-api/name: claimarmor-api-canary/' | \
+            kubectl apply -f -
+            
           # Update canary deployment
           kubectl set image deployment/claimarmor-api-canary \
-            claimarmor=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }} \
+            claimarmor=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -n claimarmor
 
           # Set canary traffic weight
           kubectl annotate ingress claimarmor-ingress \
             nginx.ingress.kubernetes.io/canary="true" \
-            nginx.ingress.kubernetes.io/canary-weight="${{ inputs.canary_weight }}" \
+            nginx.ingress.kubernetes.io/canary-weight="${{ github.event.inputs.canary_weight || '10' }}" \
             -n claimarmor --overwrite
 
           kubectl rollout status deployment/claimarmor-api-canary \
             -n claimarmor --timeout=300s
 
+      - name: Port-forward for Smoke test
+        run: |
+          kubectl port-forward svc/claimarmor-api 8000:80 -n claimarmor &
+          sleep 5
+
       - name: Smoke test canary
         run: |
-          PROD_URL="${{ secrets.PRODUCTION_URL }}"
           for i in $(seq 1 5); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${PROD_URL}/api/health")
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/api/health")
             if [ "$HTTP_CODE" = "200" ]; then
               echo "✅ Canary healthy (attempt $i)"
             else
@@ -67,8 +100,8 @@ jobs:
 
       - name: Wait for monitoring validation
         run: |
-          echo "⏳ Waiting 5 minutes for error rate validation..."
-          sleep 300
+          echo "⏳ Waiting 30 seconds for error rate validation (accelerated for POC)..."
+          sleep 30
 
   promote:
     name: Promote to Full Production
@@ -78,28 +111,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: "v1.29.0"
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.10.0
 
-      - name: Configure kubeconfig
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load image into Kind
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          kind load docker-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} -n chart-testing
 
       - name: Promote to production
         run: |
+          # Re-apply base since this is a new runner job
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/configmap.yaml
+          kubectl create secret generic claimarmor-secrets -n claimarmor --from-literal=CLAIMARMOR_AUTH_SECRET=demo-secret
+          kubectl apply -f k8s/deployments.yaml
+          kubectl apply -f k8s/service-ingress.yaml
+          
           # Update main deployment
           kubectl set image deployment/claimarmor-api \
-            claimarmor=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }} \
+            claimarmor=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -n claimarmor
 
           kubectl set image deployment/claimarmor-worker \
-            worker=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }} \
+            worker=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -n claimarmor
 
-          # Remove canary
+          # Remove canary routing
           kubectl annotate ingress claimarmor-ingress \
             nginx.ingress.kubernetes.io/canary- \
             nginx.ingress.kubernetes.io/canary-weight- \
@@ -111,11 +156,15 @@ jobs:
           kubectl rollout status deployment/claimarmor-worker \
             -n claimarmor --timeout=300s
 
+      - name: Port-forward for Final check
+        run: |
+          kubectl port-forward svc/claimarmor-api 8000:80 -n claimarmor &
+          sleep 5
+
       - name: Final health check
         run: |
-          PROD_URL="${{ secrets.PRODUCTION_URL }}"
           for i in $(seq 1 10); do
-            if curl -sf "${PROD_URL}/api/health" | grep -q "healthy"; then
+            if curl -sf "http://localhost:8000/api/health" | grep -q "healthy"; then
               echo "✅ Production is healthy"
               exit 0
             fi
