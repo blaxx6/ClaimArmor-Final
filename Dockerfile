@@ -54,6 +54,8 @@ COPY --from=builder /install /usr/local
 COPY app ./app
 COPY data ./data
 COPY monitoring ./monitoring
+COPY artifacts ./artifacts
+COPY alembic.ini .
 
 # Create data directories
 RUN mkdir -p /data /app/artifacts && \

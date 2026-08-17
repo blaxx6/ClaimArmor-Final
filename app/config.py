@@ -119,6 +119,14 @@ class Settings(BaseSettings):
             return f"sqlite:///{value}"
         return value
 
+    @field_validator("auth_secret", mode="after")
+    @classmethod
+    def _validate_auth_secret(cls, value: SecretStr, info) -> SecretStr:
+        if info.data.get("environment") == "production":
+            if value.get_secret_value() in ("claimarmor-local-demo-secret", "replace-this-in-real-deployment"):
+                raise ValueError("Insecure default auth_secret in production environment")
+        return value
+
     @property
     def effective_celery_broker(self) -> str:
         return self.celery_broker_url or self.redis_url

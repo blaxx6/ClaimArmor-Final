@@ -1,12 +1,23 @@
 from __future__ import annotations
 
+import logging
+
 from app import db
 from app.schemas import InvestigationResult
-from app.seed import COVERAGES, MEMBERS
 from app.services.agents import run_agents, stream_agents
 from app.services.matching import active_coverages, match_member
 from app.services.risk import score_risk
 from app.services.rules import evaluate_rules
+
+logger = logging.getLogger("claimarmor.pipeline")
+
+
+def send_email_notification(claim_id: str, status: str, route: str) -> None:
+    """
+    Stub for email notifications.
+    TODO: Integrate actual SMTP backend. Currently acts as a No-Op.
+    """
+    logger.info("EMAIL NOTIFICATION: Claim %s completed with status %s, route: %s", claim_id, status, route)
 
 
 def _finalize(
@@ -48,12 +59,15 @@ def _finalize(
             "risk": result.risk["probability"],
         },
     )
+    send_email_notification(claim["claim_id"], "INVESTIGATION_COMPLETED", result.route.value)
     return result
 
 
 def investigate(claim: dict) -> InvestigationResult:
-    match = match_member(claim, MEMBERS)
-    timeline = active_coverages(match["member_id"], claim["service_date"], COVERAGES)
+    members = db.list_members(claim.get("tenant_id"))
+    match = match_member(claim, members)
+    coverages = db.list_coverages(match["member_id"]) if match["member_id"] else []
+    timeline = active_coverages(match["member_id"], claim["service_date"], coverages)
     risk = score_risk(claim, timeline, match["confidence"])
     rules = evaluate_rules(claim, timeline)
     return _finalize(
@@ -67,8 +81,10 @@ def investigate(claim: dict) -> InvestigationResult:
 
 
 def investigate_events(claim: dict):
-    match = match_member(claim, MEMBERS)
-    timeline = active_coverages(match["member_id"], claim["service_date"], COVERAGES)
+    members = db.list_members(claim.get("tenant_id"))
+    match = match_member(claim, members)
+    coverages = db.list_coverages(match["member_id"]) if match["member_id"] else []
+    timeline = active_coverages(match["member_id"], claim["service_date"], coverages)
     risk = score_risk(claim, timeline, match["confidence"])
     rules = evaluate_rules(claim, timeline)
     for event in stream_agents(claim, match, timeline, risk, rules):

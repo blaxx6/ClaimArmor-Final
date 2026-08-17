@@ -22,6 +22,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable
 from typing import Any
 
+import jwt
 from fastapi import Depends, Header, HTTPException
 
 from app import db
@@ -171,13 +172,7 @@ def issue_token(
         "iat": int(time.time()),
         "exp": int(time.time()) + lifetime_seconds,
     }
-    body = (
-        base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
-        .decode()
-        .rstrip("=")
-    )
-    signature = hmac.new(_secret(), body.encode(), hashlib.sha256).hexdigest()
-    return f"{body}.{signature}"
+    return jwt.encode(payload, _secret(), algorithm="HS256")
 
 
 def issue_token_pair(user: dict) -> dict:
@@ -194,17 +189,14 @@ def issue_token_pair(user: dict) -> dict:
 def decode_token(token: str, expected_type: str = "access") -> dict:
     """Decode and verify a token. Raises HTTPException on failure."""
     try:
-        body, signature = token.split(".", 1)
-        expected = hmac.new(_secret(), body.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(signature, expected):
-            raise ValueError("signature")
-        padded = body + "=" * (-len(body) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(padded).decode())
-        if payload.get("exp", 0) < int(time.time()):
-            raise ValueError("expired")
+        payload = jwt.decode(token, _secret(), algorithms=["HS256"])
         if payload.get("type", "access") != expected_type:
             raise ValueError("wrong_token_type")
         return payload
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(401, "Invalid or expired access token") from exc
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(401, "Invalid or expired access token") from exc
     except Exception as exc:
         raise HTTPException(401, "Invalid or expired access token") from exc
 

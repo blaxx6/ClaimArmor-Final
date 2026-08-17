@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from app import db
 from app.schemas import ClaimInput
-from app.seed import DEMO_CLAIMS
+from app.seed import DEMO_CLAIMS, MEMBERS, COVERAGES
 from app.services.pipeline import investigate
 
 
@@ -28,6 +28,10 @@ class PipelineTests(unittest.TestCase):
         get_settings.cache_clear()
         db.dispose_engine()
         db.init_db()
+        for member in MEMBERS:
+            db.put_member(member)
+        for coverage in COVERAGES:
+            db.put_coverage(coverage)
 
     def tearDown(self):
         self.env_patcher.stop()

@@ -88,6 +88,7 @@ def research_node(state: InvestigationState) -> dict:
         },
         fallback,
         provider="gemini",
+        claim_id=state["claim"]["claim_id"],
     )
     output = {
         "query": query,
@@ -140,6 +141,7 @@ def reasoning_node(state: InvestigationState) -> dict:
         },
         fallback,
         provider="groq",
+        claim_id=state["claim"]["claim_id"],
     )
     output = {
         "deterministic_gate": {
@@ -200,6 +202,7 @@ def verify_node(state: InvestigationState) -> dict:
         },
         fallback,
         provider="groq",
+        claim_id=state["claim"]["claim_id"],
     )
     if provider.get("used"):
         proposed_payer = (
@@ -284,7 +287,7 @@ def explanation_node(state: InvestigationState) -> dict:
         ],
         "contradictions": state.get("contradictions", []),
     }
-    explanation, llm = enhance_explanation(context, fallback, provider="gemini")
+    explanation, llm = enhance_explanation(context, fallback, provider="gemini", claim_id=state["claim"]["claim_id"])
     return {
         "explanation": explanation,
         "llm": llm,

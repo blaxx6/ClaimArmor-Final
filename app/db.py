@@ -16,9 +16,15 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from cryptography.fernet import Fernet
+
 from sqlalchemy import (
+    JSON,
     Column,
+    DateTime,
     Float,
+    cast,
+    Index,
     Integer,
     MetaData,
     String,
@@ -29,6 +35,7 @@ from sqlalchemy import (
     func,
     insert,
     select,
+    type_coerce,
 )
 from sqlalchemy.pool import QueuePool, StaticPool
 
@@ -39,13 +46,32 @@ metadata = MetaData()
 # ── Table definitions ─────────────────────────────────────────────────
 # All tables include tenant_id for multi-tenancy support.
 
+members_table = Table(
+    "members",
+    metadata,
+    Column("member_id", String(80), primary_key=True),
+    Column("tenant_id", String(80), nullable=False, default="default", index=True),
+    Column("payload", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+)
+
+coverages_table = Table(
+    "coverages",
+    metadata,
+    Column("coverage_id", String(80), primary_key=True),
+    Column("tenant_id", String(80), nullable=False, default="default", index=True),
+    Column("member_id", String(80), nullable=False, index=True),
+    Column("payload", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+)
+
 claims_table = Table(
     "claims",
     metadata,
     Column("claim_id", String(80), primary_key=True),
     Column("tenant_id", String(80), nullable=False, default="default", index=True),
     Column("payload", Text, nullable=False),
-    Column("created_at", String(40), nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
 )
 
 investigations_table = Table(
@@ -54,7 +80,7 @@ investigations_table = Table(
     Column("claim_id", String(80), primary_key=True),
     Column("tenant_id", String(80), nullable=False, default="default", index=True),
     Column("result", Text, nullable=False),
-    Column("updated_at", String(40), nullable=False),
+    Column("updated_at", DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
 )
 
 reviews_table = Table(
@@ -64,7 +90,7 @@ reviews_table = Table(
     Column("claim_id", String(80), nullable=False, index=True),
     Column("tenant_id", String(80), nullable=False, default="default", index=True),
     Column("payload", Text, nullable=False),
-    Column("created_at", String(40), nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
 )
 
 writebacks_table = Table(
@@ -73,7 +99,7 @@ writebacks_table = Table(
     Column("claim_id", String(80), primary_key=True),
     Column("tenant_id", String(80), nullable=False, default="default", index=True),
     Column("payload", Text, nullable=False),
-    Column("created_at", String(40), nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
 )
 
 audit_table = Table(
@@ -86,7 +112,7 @@ audit_table = Table(
     Column("payload", Text, nullable=False),
     Column("previous_hash", String(64), nullable=False),
     Column("event_hash", String(64), nullable=False),
-    Column("created_at", String(40), nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
 )
 
 users_table = Table(
@@ -110,7 +136,7 @@ policies_table = Table(
     Column("status", String(20), nullable=False),
     Column("tenant_id", String(80), nullable=False, default="default", index=True),
     Column("payload", Text, nullable=False),
-    Column("created_at", String(40), nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
 )
 
 # ── Async task tracking (Celery integration) ──────────────────────────
@@ -125,8 +151,8 @@ tasks_table = Table(
     ),  # QUEUED, IN_PROGRESS, COMPLETE, FAILED
     Column("result", Text, nullable=True),
     Column("error", Text, nullable=True),
-    Column("created_at", String(40), nullable=False),
-    Column("updated_at", String(40), nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+    Column("updated_at", DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
 )
 
 # ── LLM usage tracking ───────────────────────────────────────────────
@@ -141,11 +167,15 @@ llm_usage_table = Table(
     Column("input_tokens", Integer, nullable=False, default=0),
     Column("output_tokens", Integer, nullable=False, default=0),
     Column("cost_usd", Float, nullable=True),
-    Column("created_at", String(40), nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
 )
 
+Index("ix_claims_tenant_created", claims_table.c.tenant_id, claims_table.c.created_at)
+Index("ix_investigations_tenant_updated", investigations_table.c.tenant_id, investigations_table.c.updated_at)
+Index("ix_tasks_tenant_status", tasks_table.c.tenant_id, tasks_table.c.status)
 
-# ── Engine management (connection pooling) ────────────────────────────
+
+# ── Database Initialization ────────────────────────────────────────────
 
 _ENGINE = None
 
@@ -184,8 +214,8 @@ def database_url() -> str:
     return get_settings().database_url
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _tenant_id() -> str:
@@ -220,15 +250,125 @@ def storage_info() -> dict:
 
 def _put_unique(table: Table, key_column, key: str, values: dict) -> None:
     engine = _engine()
+    dialect = engine.dialect.name
     with engine.begin() as conn:
-        conn.execute(delete(table).where(key_column == key))
-        conn.execute(insert(table).values(**values))
+        if dialect == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+            stmt = sqlite_insert(table).values(**values)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[key_column.name],
+                set_=values
+            )
+            conn.execute(stmt)
+        elif dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            stmt = pg_insert(table).values(**values)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[key_column.name],
+                set_=values
+            )
+            conn.execute(stmt)
+        else:
+            conn.execute(delete(table).where(key_column == key))
+            conn.execute(insert(table).values(**values))
+
+
+def _fernet() -> Fernet | None:
+    settings = get_settings()
+    if not settings.encryption_key:
+        if settings.is_production:
+            raise ValueError("CLAIMARMOR_ENCRYPTION_KEY is required in production")
+        return None
+    return Fernet(settings.encryption_key.get_secret_value().encode())
+
+
+def _encrypt_pii(payload: dict) -> dict:
+    f = _fernet()
+    if not f:
+        return payload
+    
+    result = dict(payload)
+    for field in ("member_name", "member_dob", "member_email", "member_phone", "member_address"):
+        if field in result and isinstance(result[field], str):
+            result[field] = f.encrypt(result[field].encode()).decode()
+    return result
+
+
+def _decrypt_pii(payload: dict) -> dict:
+    f = _fernet()
+    if not f:
+        return payload
+    
+    result = dict(payload)
+    for field in ("member_name", "member_dob", "member_email", "member_phone", "member_address"):
+        if field in result and isinstance(result[field], str):
+            try:
+                result[field] = f.decrypt(result[field].encode()).decode()
+            except Exception:
+                pass
+    return result
+
+
+# ── Members & Coverages CRUD ──────────────────────────────────────────
+
+def put_member(member: dict[str, Any]) -> None:
+    _put_unique(
+        members_table,
+        members_table.c.member_id,
+        member["member_id"],
+        {
+            "member_id": member["member_id"],
+            "tenant_id": member.get("tenant_id", _tenant_id()),
+            "payload": json.dumps(member, sort_keys=True, default=str),
+            "created_at": _now(),
+        },
+    )
+
+def get_member(member_id: str) -> dict[str, Any] | None:
+    engine = _engine()
+    with engine.connect() as conn:
+        row = conn.execute(
+            select(members_table.c.payload).where(members_table.c.member_id == member_id)
+        ).first()
+    return json.loads(row.payload) if row else None
+
+def list_members(tenant_id: str | None = None) -> list[dict[str, Any]]:
+    engine = _engine()
+    with engine.connect() as conn:
+        query = select(members_table.c.payload)
+        if tenant_id:
+            query = query.where(members_table.c.tenant_id == tenant_id)
+        rows = conn.execute(query).all()
+    return [json.loads(row.payload) for row in rows]
+
+def put_coverage(coverage: dict[str, Any]) -> None:
+    _put_unique(
+        coverages_table,
+        coverages_table.c.coverage_id,
+        coverage["coverage_id"],
+        {
+            "coverage_id": coverage["coverage_id"],
+            "tenant_id": coverage.get("tenant_id", _tenant_id()),
+            "member_id": coverage["member_id"],
+            "payload": json.dumps(coverage, sort_keys=True, default=str),
+            "created_at": _now(),
+        },
+    )
+
+def list_coverages(member_id: str) -> list[dict[str, Any]]:
+    engine = _engine()
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(coverages_table.c.payload).where(coverages_table.c.member_id == member_id)
+        ).all()
+    return [json.loads(row.payload) for row in rows]
 
 
 # ── Claims CRUD ───────────────────────────────────────────────────────
 
 
 def put_claim(claim: dict[str, Any]) -> None:
+    encrypted_claim = _encrypt_pii(claim)
     _put_unique(
         claims_table,
         claims_table.c.claim_id,
@@ -236,20 +376,24 @@ def put_claim(claim: dict[str, Any]) -> None:
         {
             "claim_id": claim["claim_id"],
             "tenant_id": claim.get("tenant_id", _tenant_id()),
-            "payload": json.dumps(claim, sort_keys=True, default=str),
+            "payload": json.dumps(encrypted_claim, sort_keys=True, default=str),
             "created_at": _now(),
         },
     )
 
 
-def list_claims(tenant_id: str | None = None) -> list[dict[str, Any]]:
+def list_claims(tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
     engine = _engine()
     with engine.connect() as conn:
         query = select(claims_table.c.payload).order_by(claims_table.c.created_at)
         if tenant_id:
             query = query.where(claims_table.c.tenant_id == tenant_id)
+        if limit is not None:
+            query = query.limit(limit)
+        if offset is not None:
+            query = query.offset(offset)
         rows = conn.execute(query).all()
-    return [json.loads(row.payload) for row in rows]
+    return [_decrypt_pii(json.loads(row.payload)) for row in rows]
 
 
 def get_claim(claim_id: str) -> dict[str, Any] | None:
@@ -258,7 +402,7 @@ def get_claim(claim_id: str) -> dict[str, Any] | None:
         row = conn.execute(
             select(claims_table.c.payload).where(claims_table.c.claim_id == claim_id)
         ).first()
-    return json.loads(row.payload) if row else None
+    return _decrypt_pii(json.loads(row.payload)) if row else None
 
 
 # ── Investigations CRUD ───────────────────────────────────────────────
@@ -289,17 +433,147 @@ def get_investigation(claim_id: str) -> dict[str, Any] | None:
     return json.loads(row.result) if row else None
 
 
-def list_investigations(tenant_id: str | None = None) -> list[dict[str, Any]]:
+def list_investigations(tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
     engine = _engine()
     with engine.connect() as conn:
         query = select(investigations_table.c.result).order_by(
-            investigations_table.c.updated_at.desc()
+            cast(investigations_table.c.updated_at, DateTime(timezone=True)).desc()
         )
         if tenant_id:
             query = query.where(investigations_table.c.tenant_id == tenant_id)
+        if limit is not None:
+            query = query.limit(limit)
+        if offset is not None:
+            query = query.offset(offset)
         rows = conn.execute(query).all()
     return [json.loads(row.result) for row in rows]
 
+
+def _json_field(column, *path_parts):
+    engine = _engine()
+    if engine.dialect.name == "sqlite":
+        json_path = "$." + ".".join(path_parts)
+        return func.json_extract(column, json_path)
+    else:
+        expr = cast(column, JSON)
+        for part in path_parts:
+            expr = expr[part]
+        return expr.as_string()
+
+
+def list_pending_reviews(tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    engine = _engine()
+    with engine.connect() as conn:
+        route_expr = _json_field(investigations_table.c.result, "route")
+        
+        latest_reviews = select(
+            reviews_table.c.claim_id,
+            func.max(reviews_table.c.created_at).label("last_reviewed")
+        ).group_by(reviews_table.c.claim_id).alias("lr")
+            
+        query = select(investigations_table.c.result).outerjoin(
+            latest_reviews, investigations_table.c.claim_id == latest_reviews.c.claim_id
+        ).where(
+            route_expr.in_(["HOLD", "HUMAN_REVIEW", "UNDETERMINED"]),
+            (latest_reviews.c.claim_id.is_(None)) | (cast(investigations_table.c.updated_at, DateTime(timezone=True)) > cast(latest_reviews.c.last_reviewed, DateTime(timezone=True)))
+        ).order_by(cast(investigations_table.c.updated_at, DateTime(timezone=True)).desc())
+        
+        if tenant_id:
+            query = query.where(investigations_table.c.tenant_id == tenant_id)
+        if limit is not None:
+            query = query.limit(limit)
+        if offset is not None:
+            query = query.offset(offset)
+            
+        rows = conn.execute(query).all()
+    return [json.loads(row.result) for row in rows]
+
+
+def list_completed_reviews(tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    engine = _engine()
+    with engine.connect() as conn:
+        query = select(reviews_table.c.payload, investigations_table.c.result).join(
+            investigations_table, reviews_table.c.claim_id == investigations_table.c.claim_id
+        ).order_by(reviews_table.c.created_at.desc())
+        
+        if tenant_id:
+            query = query.where(reviews_table.c.tenant_id == tenant_id)
+        if limit is not None:
+            query = query.limit(limit)
+        if offset is not None:
+            query = query.offset(offset)
+            
+        rows = conn.execute(query).all()
+        
+    return [
+        {
+            "investigation": json.loads(row.result),
+            "review": json.loads(row.payload)
+        }
+        for row in rows
+    ]
+
+
+def get_metrics_summary(tenant_id: str | None = None) -> dict[str, Any]:
+    engine = _engine()
+    with engine.connect() as conn:
+        # Claims ingested
+        q_claims = select(func.count()).select_from(claims_table)
+        if tenant_id:
+            q_claims = q_claims.where(claims_table.c.tenant_id == tenant_id)
+        claims_ingested = conn.execute(q_claims).scalar() or 0
+
+        # Total investigations
+        q_inv = select(func.count()).select_from(investigations_table)
+        if tenant_id:
+            q_inv = q_inv.where(investigations_table.c.tenant_id == tenant_id)
+        claims_investigated = conn.execute(q_inv).scalar() or 0
+
+        # Amount at risk
+        amount_expr = cast(_json_field(investigations_table.c.result, "financial_impact", "amount_at_risk"), Float)
+        q_amt = select(func.sum(amount_expr))
+        if tenant_id:
+            q_amt = q_amt.where(investigations_table.c.tenant_id == tenant_id)
+        estimated_amount_at_risk = conn.execute(q_amt).scalar() or 0.0
+
+        # Route counts
+        route_expr = _json_field(investigations_table.c.result, "route")
+        q_route = select(route_expr, func.count()).group_by(route_expr)
+        if tenant_id:
+            q_route = q_route.where(investigations_table.c.tenant_id == tenant_id)
+        route_counts = {row[0]: row[1] for row in conn.execute(q_route).all() if row[0] is not None}
+        
+        # Ensure all standard routes are in the counts
+        for route in ["CLEAR", "HOLD", "HUMAN_REVIEW", "UNDETERMINED"]:
+            if route not in route_counts:
+                route_counts[route] = 0
+
+        # Pending reviews
+        # Count investigations where route in HOLD/HUMAN_REVIEW/UNDETERMINED and claim_id NOT IN reviewed_claim_ids
+        latest_reviews = select(
+            reviews_table.c.claim_id,
+            func.max(reviews_table.c.created_at).label("last_reviewed")
+        ).group_by(reviews_table.c.claim_id).alias("lr")
+        
+        q_pending = select(func.count()).select_from(
+            investigations_table.outerjoin(
+                latest_reviews, investigations_table.c.claim_id == latest_reviews.c.claim_id
+            )
+        ).where(
+            route_expr.in_(["HOLD", "HUMAN_REVIEW", "UNDETERMINED"]),
+            (latest_reviews.c.claim_id.is_(None)) | (cast(investigations_table.c.updated_at, DateTime(timezone=True)) > cast(latest_reviews.c.last_reviewed, DateTime(timezone=True)))
+        )
+        if tenant_id:
+            q_pending = q_pending.where(investigations_table.c.tenant_id == tenant_id)
+        pending_reviews = conn.execute(q_pending).scalar() or 0
+
+    return {
+        "claims_ingested": claims_ingested,
+        "claims_investigated": claims_investigated,
+        "estimated_amount_at_risk": round(estimated_amount_at_risk, 2),
+        "route_counts": route_counts,
+        "pending_reviews": pending_reviews,
+    }
 
 # ── Reviews CRUD ──────────────────────────────────────────────────────
 
@@ -366,8 +640,9 @@ def append_audit(
             ).scalar_one_or_none()
             or "GENESIS"
         )
+        created_at_str = created_at.isoformat()
         event_hash = hashlib.sha256(
-            f"{claim_id}|{event_type}|{encoded}|{previous_hash}|{created_at}".encode()
+            f"{claim_id}|{event_type}|{encoded}|{previous_hash}|{created_at_str}".encode()
         ).hexdigest()
         conn.execute(
             insert(audit_table).values(
@@ -409,8 +684,15 @@ def verify_audit_chain(claim_id: str) -> dict:
     failures = []
     for event in events:
         encoded = json.dumps(event["payload"], sort_keys=True, default=str)
+        created_at = event['created_at']
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at)
+        if isinstance(created_at, datetime) and not created_at.tzinfo:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at_str = created_at.isoformat()
+        
         expected_hash = hashlib.sha256(
-            f"{claim_id}|{event['event_type']}|{encoded}|{expected_previous}|{event['created_at']}".encode()
+            f"{claim_id}|{event['event_type']}|{encoded}|{expected_previous}|{created_at_str}".encode()
         ).hexdigest()
         if event["previous_hash"] != expected_previous:
             failures.append(

@@ -56,6 +56,9 @@ def investigate_claim_async(
         result = investigate(claim).model_dump(mode="json")
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
 
+        db.put_investigation(claim_id, result)
+        db.append_audit(claim_id, "INVESTIGATION_COMPLETED", result)
+
         db.update_task_status(task_id, "COMPLETE", result=result)
         logger.info(
             "Investigation complete claim_id=%s route=%s duration_ms=%s",

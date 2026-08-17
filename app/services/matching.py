@@ -52,10 +52,14 @@ def _weighted_fallback(claim: dict, members: list[dict]) -> dict:
         score = min(1.0, score / available_weight)
         candidates.append({"member": member, "confidence": round(score, 4)})
     candidates.sort(key=lambda item: item["confidence"], reverse=True)
+    if not candidates:
+        return {"status": "NO_MATCH", "member_id": None, "confidence": 0.0, "method": "weighted_fallback"}
     return _format_match(candidates, "weighted_fallback")
 
 
 def _format_match(candidates: list[dict], method: str) -> dict:
+    if not candidates:
+        return {"status": "NO_MATCH", "member_id": None, "confidence": 0.0, "method": method}
     best = candidates[0]
     return {
         "member_id": best["member"]["member_id"],

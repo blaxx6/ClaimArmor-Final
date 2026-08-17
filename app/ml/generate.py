@@ -17,6 +17,9 @@ SCENARIOS = (
     "inactive_secondary",
     "wrong_submitted_payer",
     "identity_ambiguity",
+    "triple_coverage",
+    "expired_medicare",
+    "missing_dob",
 )
 
 FIRST_NAMES = (
@@ -60,7 +63,7 @@ def _coverage(payer: str, kind: str, active: bool = True) -> dict:
 
 
 def generate_record(index: int, rng: random.Random) -> dict:
-    scenario = rng.choices(SCENARIOS, weights=(24, 10, 13, 13, 13, 9, 10, 8), k=1)[0]
+    scenario = rng.choices(SCENARIOS, weights=(20, 10, 10, 10, 10, 9, 10, 8, 5, 4, 4), k=1)[0]
     service = _random_date(rng, date(2026, 1, 1), date(2026, 12, 31))
     age = rng.randint(18, 90)
     dob = service.replace(year=service.year - age)
@@ -111,6 +114,24 @@ def generate_record(index: int, rng: random.Random) -> dict:
     elif scenario == "identity_ambiguity":
         claim["member_id"] = None
         match_confidence = round(rng.uniform(0.62, 0.84), 4)
+    elif scenario == "triple_coverage":
+        timeline = [
+            _coverage("EMPLOYER_PLAN", "EMPLOYER"),
+            _coverage("MEDICARE", "MEDICARE"),
+            _coverage("AUTO_INSURER", "AUTO")
+        ]
+        claim["accident_related"] = True
+        claim["claim_type"] = "TRAUMA"
+        primary = "AUTO_INSURER"
+        overpayment = 1
+    elif scenario == "expired_medicare":
+        timeline = [_coverage("MEDICARE", "MEDICARE", active=False)]
+        claim["submitted_payer"] = "MEDICARE"
+        primary = None
+        overpayment = 1
+    elif scenario == "missing_dob":
+        claim["member_dob"] = "1900-01-01"
+        match_confidence = round(rng.uniform(0.5, 0.7), 4)
 
     # Controlled label noise prevents the model from merely memorising scenario rules.
     if rng.random() < 0.025:

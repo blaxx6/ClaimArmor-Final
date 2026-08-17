@@ -19,6 +19,17 @@ from app.config import get_settings
 
 logger = logging.getLogger("claimarmor.llm")
 
+# Circuit breaker state
+_CIRCUIT_BREAKER_FAILS = 0
+_CIRCUIT_BREAKER_LAST_FAIL = 0.0
+
+def _sanitize_prompt(prompt: str) -> str:
+    # Basic PHI scrubbing (mask 9-digit SSNs and typical email addresses)
+    sanitized = re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "***-**-****", prompt)
+    sanitized = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[REDACTED_EMAIL]", sanitized)
+    return sanitized
+
+
 
 def _prompt(context: dict) -> str:
     return (
@@ -82,7 +93,18 @@ def _provider_call(
     json_mode: bool = False,
     schema: dict | None = None,
     provider_override: str | None = None,
+    claim_id: str = "system",
 ) -> tuple[str, dict]:
+    global _CIRCUIT_BREAKER_FAILS, _CIRCUIT_BREAKER_LAST_FAIL
+    
+    if _CIRCUIT_BREAKER_FAILS >= 3:
+        if time.time() - _CIRCUIT_BREAKER_LAST_FAIL < 60:
+            return "", {"mode": "circuit_breaker", "used": False, "reason": "CircuitBreakerOpen"}
+        else:
+            _CIRCUIT_BREAKER_FAILS = 0
+
+    prompt = _sanitize_prompt(prompt)
+
     settings = get_settings()
     mode = provider_override or settings.llm_mode
     key_names = {
@@ -146,7 +168,8 @@ def _provider_call(
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
 
         # Log LLM usage to database (best-effort)
-        _log_usage(mode, model, usage)
+        _log_usage(mode, model, usage, claim_id=claim_id)
+        _CIRCUIT_BREAKER_FAILS = 0
 
         logger.info(
             "llm_call mode=%s model=%s tokens_in=%d tokens_out=%d duration_ms=%s",
@@ -167,6 +190,9 @@ def _provider_call(
         }
 
     except Exception as exc:
+        _CIRCUIT_BREAKER_FAILS += 1
+        _CIRCUIT_BREAKER_LAST_FAIL = time.time()
+        
         reason = type(exc).__name__
         if hasattr(exc, "response") and getattr(exc.response, "status_code", None):
             reason = f"HTTP_{exc.response.status_code}"
@@ -174,18 +200,33 @@ def _provider_call(
         return "", {"mode": "offline_fallback", "used": False, "reason": reason}
 
 
-def _log_usage(provider: str, model: str, usage: dict) -> None:
+def _log_usage(provider: str, model: str, usage: dict, claim_id: str = "system") -> None:
     """Best-effort log LLM usage to DB for billing/monitoring."""
     try:
         from app import db
+        
+        in_tokens = usage.get("input_tokens", 0)
+        out_tokens = usage.get("output_tokens", 0)
+        
+        # Calculate approximate cost
+        cost = 0.0
+        if "claude" in model:
+            cost = (in_tokens / 1000000) * 3.0 + (out_tokens / 1000000) * 15.0
+        elif "gemini" in model:
+            cost = (in_tokens / 1000000) * 0.35 + (out_tokens / 1000000) * 1.05
+        elif "gpt" in model:
+            cost = (in_tokens / 1000000) * 0.50 + (out_tokens / 1000000) * 1.50
+        else:
+            cost = (in_tokens / 1000000) * 1.0 + (out_tokens / 1000000) * 2.0
 
         db.log_llm_usage(
             tenant_id=get_settings().tenant_id,
-            claim_id="system",
+            claim_id=claim_id,
             provider=provider,
             model=model,
-            input_tokens=usage.get("input_tokens", 0),
-            output_tokens=usage.get("output_tokens", 0),
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
+            cost_usd=cost,
         )
     except Exception:
         pass  # Never fail the main request due to usage logging
@@ -236,6 +277,7 @@ def run_structured_agent(
     context: dict,
     fallback: dict,
     provider: str | None = None,
+    claim_id: str = "system",
 ) -> tuple[dict, dict]:
     prompt = (
         f"You are the ClaimArmor {role}. {instructions}\n"
@@ -248,6 +290,7 @@ def run_structured_agent(
         json_mode=True,
         schema=_schema_from_value(fallback),
         provider_override=provider,
+        claim_id=claim_id,
     )
     parsed, valid = _parse_json(text, fallback)
     metadata = {
@@ -264,7 +307,7 @@ def run_structured_agent(
 
 
 def enhance_explanation(
-    context: dict, fallback: str, provider: str | None = None
+    context: dict, fallback: str, provider: str | None = None, claim_id: str = "system"
 ) -> tuple[str, dict]:
-    text, metadata = _provider_call(_prompt(context), provider_override=provider)
+    text, metadata = _provider_call(_prompt(context), provider_override=provider, claim_id=claim_id)
     return (text or fallback), metadata

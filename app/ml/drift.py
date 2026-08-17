@@ -100,9 +100,10 @@ def compute_drift_report(
         actual_values = []
         for claim in recent_claims[:500]:  # Cap at 500 for performance
             risk = claim.get("risk", {})
-            if isinstance(risk, dict) and "factors" in risk:
-                # Feature values aren't directly stored, so we use the
-                # risk probability as a proxy for drift detection
+            if isinstance(risk, dict) and "raw_features" in risk:
+                actual_values.append(risk["raw_features"].get(feature, 0.0))
+            elif isinstance(risk, dict) and "probability" in risk:
+                # Fallback for old claims without raw_features
                 actual_values.append(risk.get("probability", 0.5))
 
         if len(actual_values) < 10:

@@ -1,7 +1,7 @@
 {
   "model_type": "Calibrated XGBoost",
   "model_version": "overpayment-risk-v2-calibrated",
-  "trained_at": "2026-08-06T13:52:28.810624+00:00",
+  "trained_at": "2026-08-14T15:19:47.476693+00:00",
   "dataset_rows": 3000,
   "training_rows": 2340,
   "test_rows": 660,
@@ -11,9 +11,9 @@
   "precision": 0.8317,
   "recall": 0.7522,
   "f1": 0.79,
-  "roc_auc": 0.9422,
-  "pr_auc": 0.9002,
-  "brier_score": 0.0879,
+  "roc_auc": 0.9416,
+  "pr_auc": 0.9027,
+  "brier_score": 0.0877,
   "calibration": "3-fold sigmoid calibration on synthetic training data",
   "confusion_matrix": {
     "true_negative": 395,
@@ -22,8 +22,8 @@
     "true_positive": 173
   },
   "total_test_overpayment_value": 1139191.46,
-  "detected_test_overpayment_value": 952214.98,
-  "value_weighted_recall": 0.8359,
+  "detected_test_overpayment_value": 945139.11,
+  "value_weighted_recall": 0.8297,
   "features": [
     "claim_amount_log",
     "active_coverage_count",

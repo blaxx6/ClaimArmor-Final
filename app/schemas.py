@@ -66,7 +66,7 @@ class ClaimInput(BaseModel):
 
 
 class ReviewRequest(BaseModel):
-    reviewer: str = Field(min_length=2, max_length=80)
+    reviewer: str = Field(default="reviewer", max_length=80)
     action: str
     reason: str = Field(min_length=3, max_length=500)
     final_route: DecisionRoute | None = None
@@ -81,6 +81,7 @@ class ReviewRequest(BaseModel):
             "OVERRIDE",
             "REQUEST_INFORMATION",
             "REINVESTIGATE",
+            "ESCALATE",
         }:
             raise ValueError("unsupported review action")
         return value
