@@ -1,0 +1,62 @@
+import os
+import sys
+import json
+import time
+sys.path.append(os.path.abspath('.'))
+
+from app import db
+from sqlalchemy import select, func, cast, JSON
+
+db.init_db()
+
+claim = {
+    "claim_id": "test_claim_logic",
+    "tenant_id": "default",
+    "member_id": "test_member",
+    "service_date": "2024-01-01",
+    "diagnosis_codes": ["A00"],
+    "procedure_codes": ["B00"],
+    "billed_amount": 100.0,
+    "provider_id": "P1"
+}
+db.put_claim(claim)
+
+result = {
+    "claim_id": "test_claim_logic",
+    "route": "HOLD",
+    "financial_impact": {"amount_at_risk": 100.0}
+}
+# Initial investigation
+db.put_investigation("test_claim_logic", result)
+
+# A review is made
+db.put_review("test_claim_logic", {"action": "HOLD"})
+
+# At this point, should NOT be in pending reviews
+engine = db._engine()
+with engine.connect() as conn:
+    route_expr = cast(db.investigations_table.c.result, JSON)["route"].as_string()
+    
+    latest_reviews = select(
+        db.reviews_table.c.claim_id,
+        func.max(db.reviews_table.c.created_at).label("last_reviewed")
+    ).group_by(db.reviews_table.c.claim_id).alias("lr")
+    
+    query = select(db.investigations_table.c.result).outerjoin(
+        latest_reviews, db.investigations_table.c.claim_id == latest_reviews.c.claim_id
+    ).where(
+        route_expr.in_(["HOLD", "HUMAN_REVIEW", "UNDETERMINED"]),
+        (latest_reviews.c.claim_id.is_(None)) | (db.investigations_table.c.updated_at > latest_reviews.c.last_reviewed)
+    )
+    rows1 = conn.execute(query).all()
+
+# Now reinvestigate
+time.sleep(0.5)
+db.put_investigation("test_claim_logic", result)
+
+# Should now BE in pending reviews
+with engine.connect() as conn:
+    rows2 = conn.execute(query).all()
+
+print(f"Pending after review: {len(rows1)}")
+print(f"Pending after reinvestigate: {len(rows2)}")
