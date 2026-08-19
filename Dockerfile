@@ -34,7 +34,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     CLAIMARMOR_APP_VERSION=${APP_VERSION} \
     CLAIMARMOR_ENVIRONMENT=production \
-    CLAIMARMOR_LOG_FORMAT=json
+    CLAIMARMOR_LOG_FORMAT=json \
+    PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc_dir
 
 # Install runtime dependencies only (no gcc)
 RUN apt-get update && \
@@ -43,7 +44,9 @@ RUN apt-get update && \
 
 # Create non-root user
 RUN groupadd -r claimarmor && \
-    useradd -r -g claimarmor -d /app -s /sbin/nologin claimarmor
+    useradd -r -g claimarmor -d /app -s /sbin/nologin claimarmor && \
+    mkdir -p /tmp/prometheus_multiproc_dir && \
+    chown -R claimarmor:claimarmor /tmp/prometheus_multiproc_dir
 
 WORKDIR /app
 

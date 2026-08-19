@@ -436,7 +436,7 @@ def get_investigation(claim_id: str) -> dict[str, Any] | None:
 def list_investigations(tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
     engine = _engine()
     with engine.connect() as conn:
-        query = select(investigations_table.c.result).order_by(
+        query = select(investigations_table.c.claim_id, investigations_table.c.result).order_by(
             cast(investigations_table.c.updated_at, DateTime(timezone=True)).desc()
         )
         if tenant_id:
@@ -446,7 +446,7 @@ def list_investigations(tenant_id: str | None = None, limit: int = 100, offset: 
         if offset is not None:
             query = query.offset(offset)
         rows = conn.execute(query).all()
-    return [json.loads(row.result) for row in rows]
+    return [{"claim_id": row.claim_id, **json.loads(row.result)} for row in rows]
 
 
 def _json_field(column, *path_parts):
@@ -471,7 +471,7 @@ def list_pending_reviews(tenant_id: str | None = None, limit: int = 100, offset:
             func.max(reviews_table.c.created_at).label("last_reviewed")
         ).group_by(reviews_table.c.claim_id).alias("lr")
             
-        query = select(investigations_table.c.result).outerjoin(
+        query = select(investigations_table.c.claim_id, investigations_table.c.result).outerjoin(
             latest_reviews, investigations_table.c.claim_id == latest_reviews.c.claim_id
         ).where(
             route_expr.in_(["HOLD", "HUMAN_REVIEW", "UNDETERMINED"]),
@@ -486,7 +486,7 @@ def list_pending_reviews(tenant_id: str | None = None, limit: int = 100, offset:
             query = query.offset(offset)
             
         rows = conn.execute(query).all()
-    return [json.loads(row.result) for row in rows]
+    return [{"claim_id": row.claim_id, **json.loads(row.result)} for row in rows]
 
 
 def list_completed_reviews(tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
@@ -631,6 +631,14 @@ def append_audit(
     effective_tenant = tenant_id or _tenant_id()
     engine = _engine()
     with engine.begin() as conn:
+        # Lock the claim record to prevent race conditions during audit append
+        if engine.dialect.name == "postgresql":
+            conn.execute(
+                select(claims_table.c.claim_id)
+                .where(claims_table.c.claim_id == claim_id)
+                .with_for_update()
+            )
+            
         previous_hash = (
             conn.execute(
                 select(audit_table.c.event_hash)
@@ -675,7 +683,7 @@ def get_audit(claim_id: str) -> list[dict[str, Any]]:
             .mappings()
             .all()
         )
-    return [{**dict(row), "payload": json.loads(row["payload"])} for row in rows]
+    return [{**dict(row), "payload": json.loads(row["payload"]), "raw_payload": row["payload"]} for row in rows]
 
 
 def verify_audit_chain(claim_id: str) -> dict:
@@ -683,23 +691,33 @@ def verify_audit_chain(claim_id: str) -> dict:
     expected_previous = "GENESIS"
     failures = []
     for event in events:
-        encoded = json.dumps(event["payload"], sort_keys=True, default=str)
+        encoded = event["raw_payload"]
         created_at = event['created_at']
         if isinstance(created_at, str):
             created_at = datetime.fromisoformat(created_at)
         if isinstance(created_at, datetime) and not created_at.tzinfo:
             created_at = created_at.replace(tzinfo=timezone.utc)
+        
+        # Format identical to how append_audit formats it:
+        # isoformat() on a UTC timezone-aware datetime will append '+00:00'
         created_at_str = created_at.isoformat()
+        
+        # If the original string had a slightly different format (e.g. SQLite losing microseconds),
+        # this might still mismatch. We do our best to reconstruct the original created_at_str.
+        # SQLite drops +00:00 but SQLAlchemy reconstructs it naive, so adding tzinfo=utc matches it.
+        # However, SQLite replaces T with a space when saving DateTime! SQLAlchemy might return it with space.
+        if " " in created_at_str:
+            created_at_str = created_at_str.replace(" ", "T")
         
         expected_hash = hashlib.sha256(
             f"{claim_id}|{event['event_type']}|{encoded}|{expected_previous}|{created_at_str}".encode()
         ).hexdigest()
         if event["previous_hash"] != expected_previous:
             failures.append(
-                {"event_id": event["id"], "reason": "previous_hash_mismatch"}
+                {"event_id": event["id"], "reason": "previous_hash_mismatch", "expected": expected_previous, "actual": event["previous_hash"]}
             )
         if event["event_hash"] != expected_hash:
-            failures.append({"event_id": event["id"], "reason": "event_hash_mismatch"})
+            failures.append({"event_id": event["id"], "reason": "event_hash_mismatch", "expected": expected_hash, "actual": event["event_hash"]})
         expected_previous = event["event_hash"]
     return {
         "claim_id": claim_id,

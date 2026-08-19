@@ -40,6 +40,8 @@ try:
         Counter,
         Histogram,
         generate_latest,
+        CollectorRegistry,
+        multiprocess,
     )
 except ImportError:
     CONTENT_TYPE_LATEST = "text/plain; version=0.0.4"
@@ -245,7 +247,14 @@ async def operational_middleware(request: Request, call_next):
 
 @app.get("/metrics", include_in_schema=False)
 def prometheus_metrics() -> Response:
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    import os
+    if "PROMETHEUS_MULTIPROC_DIR" in os.environ:
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)
+        data = generate_latest(registry)
+    else:
+        data = generate_latest()
+    return Response(data, media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/", include_in_schema=False)
