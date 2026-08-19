@@ -82,7 +82,7 @@ export function ClaimDetailPage() {
 
   if (!detail) return <div className="skeleton" style={{ height: 200 }} />;
   const claim = detail.claim;
-  const canInvestigate = ['ANALYST', 'REVIEWER'].includes(user?.role);
+  const canInvestigate = ['ANALYST', 'REVIEWER', 'ADMIN'].includes(user?.role);
 
   return (
     <>

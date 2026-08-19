@@ -34,6 +34,7 @@ services:
 
   # ── API Server ────────────────────────────────────────────────────
   claimarmor:
+    image: claimarmor-app:local
     build:
       context: .
       args:
@@ -65,7 +66,11 @@ services:
 
   # ── Celery Worker (high priority) ─────────────────────────────────
   worker:
-    build: .
+    image: claimarmor-app:local
+    build:
+      context: .
+      args:
+        APP_VERSION: "1.0.0"
     command: >
       python -m celery -A app.worker worker
       -E
@@ -91,7 +96,11 @@ services:
 
   # ── Celery Worker (bulk processing) ───────────────────────────────
   worker-bulk:
-    build: .
+    image: claimarmor-app:local
+    build:
+      context: .
+      args:
+        APP_VERSION: "1.0.0"
     command: >
       python -m celery -A app.worker worker
       -E
@@ -117,7 +126,11 @@ services:
 
   # ── Celery Beat (periodic tasks) ──────────────────────────────────
   beat:
-    build: .
+    image: claimarmor-app:local
+    build:
+      context: .
+      args:
+        APP_VERSION: "1.0.0"
     command: >
       python -m celery -A app.worker beat
       --loglevel=info
@@ -132,7 +145,11 @@ services:
 
   # ── Flower (Celery monitoring UI) ─────────────────────────────────
   flower:
-    build: .
+    image: claimarmor-app:local
+    build:
+      context: .
+      args:
+        APP_VERSION: "1.0.0"
     command: >
       python -m celery -A app.worker flower
       --port=5555

@@ -382,10 +382,10 @@ def put_claim(claim: dict[str, Any]) -> None:
     )
 
 
-def list_claims(tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+def list_claims(tenant_id: str | None = None, limit: int = 1000, offset: int = 0) -> list[dict[str, Any]]:
     engine = _engine()
     with engine.connect() as conn:
-        query = select(claims_table.c.payload).order_by(claims_table.c.created_at)
+        query = select(claims_table.c.payload).order_by(claims_table.c.created_at.desc())
         if tenant_id:
             query = query.where(claims_table.c.tenant_id == tenant_id)
         if limit is not None:
@@ -433,7 +433,7 @@ def get_investigation(claim_id: str) -> dict[str, Any] | None:
     return json.loads(row.result) if row else None
 
 
-def list_investigations(tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+def list_investigations(tenant_id: str | None = None, limit: int = 1000, offset: int = 0) -> list[dict[str, Any]]:
     engine = _engine()
     with engine.connect() as conn:
         query = select(investigations_table.c.claim_id, investigations_table.c.result).order_by(
@@ -461,7 +461,7 @@ def _json_field(column, *path_parts):
         return expr.as_string()
 
 
-def list_pending_reviews(tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+def list_pending_reviews(tenant_id: str | None = None, limit: int = 1000, offset: int = 0) -> list[dict[str, Any]]:
     engine = _engine()
     with engine.connect() as conn:
         route_expr = _json_field(investigations_table.c.result, "route")
@@ -489,7 +489,7 @@ def list_pending_reviews(tenant_id: str | None = None, limit: int = 100, offset:
     return [{"claim_id": row.claim_id, **json.loads(row.result)} for row in rows]
 
 
-def list_completed_reviews(tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+def list_completed_reviews(tenant_id: str | None = None, limit: int = 1000, offset: int = 0) -> list[dict[str, Any]]:
     engine = _engine()
     with engine.connect() as conn:
         query = select(reviews_table.c.claim_id, reviews_table.c.payload, investigations_table.c.result).join(

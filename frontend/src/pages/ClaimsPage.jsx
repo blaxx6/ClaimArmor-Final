@@ -10,12 +10,14 @@ export function ClaimsPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [page, setPage] = useState(0);
+  const limit = 200;
 
-  const refresh = () => api(API_ENDPOINTS.claims.list()).then(setClaims).catch(e => setError(e.message));
+  const refresh = () => api(API_ENDPOINTS.claims.list({ limit, offset: page * limit })).then(setClaims).catch(e => setError(e.message));
   
   useEffect(() => { 
     refresh(); 
-  }, [api]);
+  }, [api, page]);
 
   const canIngest = ['ANALYST', 'ADMIN'].includes(user?.role);
 
@@ -115,6 +117,12 @@ export function ClaimsPage() {
             {claims.length === 0 && <tr><td colSpan={7} className="empty-state"><div className="icon">📋</div><p>No claims yet</p></td></tr>}
           </tbody>
         </table>
+      </div>
+      
+      <div className="flex gap-2" style={{ marginTop: '16px', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button className="btn btn-secondary" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>← Previous</button>
+        <span style={{ fontSize: '14px', color: 'var(--ca-text-secondary)' }}>Page {page + 1} (Up to {limit} per page)</span>
+        <button className="btn btn-secondary" onClick={() => setPage(p => p + 1)} disabled={claims.length < limit}>Next →</button>
       </div>
     </>
   );

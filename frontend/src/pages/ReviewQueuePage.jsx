@@ -15,11 +15,15 @@ export function ReviewQueuePage() {
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState('');
 
+  const [queuePage, setQueuePage] = useState(0);
+  const [historyPage, setHistoryPage] = useState(0);
+  const limit = 200;
+
   const refresh = useCallback(() => {
-    api(API_ENDPOINTS.investigations.reviewQueue()).then(setQueue).catch(() => { });
-    api(API_ENDPOINTS.investigations.completedReviews()).then(setHistory).catch(() => { });
+    api(API_ENDPOINTS.investigations.reviewQueue({ limit, offset: queuePage * limit })).then(setQueue).catch(() => { });
+    api(API_ENDPOINTS.investigations.completedReviews({ limit, offset: historyPage * limit })).then(setHistory).catch(() => { });
     api(API_ENDPOINTS.analytics.metrics()).then(m => setPendingCount(m.pending_reviews)).catch(() => { });
-  }, [api]);
+  }, [api, queuePage, historyPage]);
 
   useEffect(() => {
     refresh();
@@ -115,6 +119,26 @@ export function ReviewQueuePage() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="flex gap-2" style={{ marginTop: '16px', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button 
+          className="btn btn-secondary" 
+          onClick={() => tab === 'pending' ? setQueuePage(p => Math.max(0, p - 1)) : setHistoryPage(p => Math.max(0, p - 1))} 
+          disabled={(tab === 'pending' ? queuePage : historyPage) === 0}
+        >
+          ← Previous
+        </button>
+        <span style={{ fontSize: '14px', color: 'var(--ca-text-secondary)' }}>
+          Page {(tab === 'pending' ? queuePage : historyPage) + 1} (Up to {limit} per page)
+        </span>
+        <button 
+          className="btn btn-secondary" 
+          onClick={() => tab === 'pending' ? setQueuePage(p => p + 1) : setHistoryPage(p => p + 1)} 
+          disabled={(tab === 'pending' ? queue.length : history.length) < limit}
+        >
+          Next →
+        </button>
       </div>
 
       {reviewModal && (

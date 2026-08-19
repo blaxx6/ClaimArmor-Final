@@ -9,6 +9,8 @@ sqlalchemy>=2.0,<3
 psycopg[binary]>=3.2,<4
 
 # ── ML / Data Science ────────────────────────────────────────────────
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0,<3
 numpy>=1.26,<3
 pandas>=2.2,<3
 scikit-learn>=1.6,<2

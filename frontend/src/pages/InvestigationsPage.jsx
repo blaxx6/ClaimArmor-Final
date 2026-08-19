@@ -7,9 +7,11 @@ export function InvestigationsPage() {
   const { api } = useAuth();
   const [items, setItems] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const limit = 200;
 
   const refresh = () => {
-    api(API_ENDPOINTS.investigations.list()).then(setItems).catch(() => { });
+    api(API_ENDPOINTS.investigations.list({ limit, offset: page * limit })).then(setItems).catch(() => { });
     api(API_ENDPOINTS.analytics.metrics()).then(m => setTotalCount(m.claims_investigated)).catch(() => { });
   };
 
@@ -17,7 +19,7 @@ export function InvestigationsPage() {
     refresh();
     window.addEventListener('review-updated', refresh);
     return () => window.removeEventListener('review-updated', refresh);
-  }, [api]);
+  }, [api, page]);
 
   return (
     <>
@@ -45,6 +47,12 @@ export function InvestigationsPage() {
             {items.length === 0 && <tr><td colSpan={6} className="empty-state"><div className="icon">🔍</div><p>No investigations yet</p></td></tr>}
           </tbody>
         </table>
+      </div>
+      
+      <div className="flex gap-2" style={{ marginTop: '16px', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button className="btn btn-secondary" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>← Previous</button>
+        <span style={{ fontSize: '14px', color: 'var(--ca-text-secondary)' }}>Page {page + 1} (Up to {limit} per page)</span>
+        <button className="btn btn-secondary" onClick={() => setPage(p => p + 1)} disabled={items.length < limit}>Next →</button>
       </div>
     </>
   );
