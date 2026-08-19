@@ -492,7 +492,7 @@ def list_pending_reviews(tenant_id: str | None = None, limit: int = 100, offset:
 def list_completed_reviews(tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
     engine = _engine()
     with engine.connect() as conn:
-        query = select(reviews_table.c.payload, investigations_table.c.result).join(
+        query = select(reviews_table.c.claim_id, reviews_table.c.payload, investigations_table.c.result).join(
             investigations_table, reviews_table.c.claim_id == investigations_table.c.claim_id
         ).order_by(reviews_table.c.created_at.desc())
         
@@ -508,7 +508,7 @@ def list_completed_reviews(tenant_id: str | None = None, limit: int = 100, offse
     return [
         {
             "investigation": json.loads(row.result),
-            "review": json.loads(row.payload)
+            "review": {"claim_id": row.claim_id, **json.loads(row.payload)}
         }
         for row in rows
     ]
